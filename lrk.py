@@ -25,6 +25,10 @@ class Set(set):
 
 
 class Rules(dict):
+	def __init__(self, *rules):
+		super().__init__()
+		self.add_rules(*rules)
+
 	def add_rule(self, product, tokens, follow=None):
 		if product in self:
 			self[product].tokens.append(tokens)
@@ -68,6 +72,7 @@ class Rules(dict):
 	def __str__(self):
 		return self.__repr__()
 
+
 class Rule:
 	def __init__(self, product, tokens=None, follow=None):
 		self.product = product
@@ -97,8 +102,7 @@ Start = NT("Start")
 Add = NT("Add")
 Factor = NT("Factor")
 Term = NT("Term")
-rules = Rules()
-rules.add_rules(
+rules = Rules(
 	(Start, [Add], ["$"]),
 	(Add, [Add, "+", Factor]),
 	(Add, [Factor]),
@@ -108,3 +112,6 @@ rules.add_rules(
 	(Term, ["0"]),
 	(Term, ["1"])
 )
+closure(rules.first)
+closure(rules.follow)
+print(rules)
