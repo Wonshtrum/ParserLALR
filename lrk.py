@@ -12,6 +12,14 @@ class NT:
 		return self.__repr__()
 
 
+class _EOF:
+	def __repr__(self):
+		return "$"
+	
+	def __str__(self):
+		return self.__repr__()
+EOF = _EOF()
+
 class Set(set):
 	def update(self, elements):
 		result = not self.issuperset(elements)
@@ -103,10 +111,9 @@ class State(dict):
 		key = (product, *tokens, position)
 		if key in self:
 			if look is not None:
-				return self[key].look.update(look)
+				self[key].look.update(look)
 		else:
 			self[key] = Position(product, tokens, position, look)
-			return True
 	
 	def add_positions(self, *positions):
 		for position in positions:
@@ -114,7 +121,7 @@ class State(dict):
 
 	def add_rule(self, rule, look=None):
 		for tokens in rule.tokens:
-			return self.add_position(rule.product, tokens, 0, look)
+			self.add_position(rule.product, tokens, 0, look)
 	
 	def entail(self):
 		dirty = False
@@ -163,7 +170,7 @@ class Position:
 		return self.position+1 == len(self.tokens)
 	
 	def __repr__(self):
-		return f"{self.product} -> "+" ".join(("." if i == self.position else "")+str(token)
+		return f"{self.product} {'=' if self.visited else '-'}> "+" ".join(("." if i == self.position else "")+str(token)
 		for i, token in enumerate(self.tokens))+"\t\t -- {"+", ".join(str(token)
 		for token in self.look)+"}"
 
@@ -176,6 +183,7 @@ def closure(f, verbose=lambda x:None):
 	while f():
 		i += 1
 		verbose(i)
+	print("closure after", i)
 
 
 Start = NT("Start")
@@ -183,7 +191,7 @@ Add = NT("Add")
 Factor = NT("Factor")
 Term = NT("Term")
 rules = Rules(
-	(Start, [Add], ["$"]),
+	(Start, [Add], [EOF]),
 	(Add, [Add, "+", Factor]),
 	(Add, [Factor]),
 	(Factor, [Factor, "*", Term]),
@@ -195,6 +203,21 @@ rules = Rules(
 closure(rules.first)
 closure(rules.follow)
 print(rules)
+state = State(
+	rules,
+	(Add, [Add, "+", Factor], 2, ["+", ")", EOF])
+)
+closure(state.entail)
+print("--------------------")
+print(state)
+state = State(
+	rules,
+	(Term, ["(", Add, ")"], 1, ["*", "+", ")", EOF])
+)
+closure(state.entail, lambda x:print(x,"\n",state))
+print("--------------------")
+print(state)
+print("\n====================")
 
 
 S = NT("S")
@@ -202,7 +225,7 @@ A = NT("A")
 B = NT("B")
 X = NT("X")
 rules = Rules(
-	(S, ["a", A, "b"], ["$"]),
+	(S, ["a", A, "b"], [EOF]),
 	(S, ["a", B, "d"]),
 	(S, ["c", A, "d"]),
 	(S, ["c", B, "b"]),
@@ -210,12 +233,15 @@ rules = Rules(
 	(B, [X]),
 	(X, ["x"])
 )
-closure(rules.first, print)
-closure(rules.follow, print)
+closure(rules.first)
+closure(rules.follow)
 print(rules)
 state = State(
 	rules,
-	(S, ["a", A, "b"], 1, ["$"]),
-	(S, ["a", B, "d"], 1, ["$"])
+	(S, ["a", A, "b"], 1, [EOF]),
+	(S, ["a", B, "d"], 1, [EOF])
 )
-closure(state.entail, print)
+closure(state.entail)
+print("--------------------")
+print(state)
+print("\n====================")
