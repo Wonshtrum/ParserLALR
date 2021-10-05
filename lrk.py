@@ -84,8 +84,88 @@ class Rule:
 		return f"{self.product} -> "+f"\n{' '*len(self.product)}  > ".join(
 			" ".join(str(token)
 			for token in tokens)
-			+("" if i else "\t\t -- {"+", ".join(str(_) for _ in self.follow)+"} {"+", ".join(str(_) for _ in self.first)+"}")
+			+("" if i else "\t\t -- {"+", ".join(str(_)
+			for _ in self.follow)+"} {"+", ".join(str(_)
+			for _ in self.first)+"}")
 			for i, tokens in enumerate(self.tokens))
+
+	def __str__(self):
+		return self.__repr__()
+
+
+class State(dict):
+	def __init__(self, rules, *positions):
+		super().__init__()
+		self.rules = rules
+		self.add_positions(*positions)
+
+	def add_position(self, product, tokens, position=0, look=None):
+		key = (product, *tokens, position)
+		if key in self:
+			if look is not None:
+				return self[key].look.update(look)
+		else:
+			self[key] = Position(product, tokens, position, look)
+			return True
+	
+	def add_positions(self, *positions):
+		for position in positions:
+			self.add_position(*position)
+
+	def add_rule(self, rule, look=None):
+		for tokens in rule.tokens:
+			return self.add_position(rule.product, tokens, 0, look)
+	
+	def entail(self):
+		dirty = False
+		new = []
+		for position in self.values():
+			if position.visited:
+				continue
+			position.visited = True
+			dirty = True
+			at = position.at()
+			if isinstance(at, NT):
+				rule = self.rules[at]
+				if position.last():
+					next = rule.follow
+				elif isinstance(position.next(), NT):
+					next = self.rules[position.next()].first
+				else:
+					next = position.next()
+				new.append((rule, next))
+		for rule, next in new:
+			self.add_rule(rule, next)
+		return dirty
+
+	def __repr__(self):
+		return "\n".join(str(position) for position in self.values())
+	
+	def __str__(self):
+		return self.__repr__()
+
+
+class Position:
+	def __init__(self, product, tokens, position=0, look=None):
+		self.product = product
+		self.tokens = tokens
+		self.position = position
+		self.look = Set() if look is None else Set(look)
+		self.visited = False
+	
+	def at(self):
+		return self.tokens[self.position]
+	
+	def next(self):
+		return self.tokens[self.position+1]
+	
+	def last(self):
+		return self.position+1 == len(self.tokens)
+	
+	def __repr__(self):
+		return f"{self.product} -> "+" ".join(("." if i == self.position else "")+str(token)
+		for i, token in enumerate(self.tokens))+"\t\t -- {"+", ".join(str(token)
+		for token in self.look)+"}"
 
 	def __str__(self):
 		return self.__repr__()
@@ -115,3 +195,27 @@ rules = Rules(
 closure(rules.first)
 closure(rules.follow)
 print(rules)
+
+
+S = NT("S")
+A = NT("A")
+B = NT("B")
+X = NT("X")
+rules = Rules(
+	(S, ["a", A, "b"], ["$"]),
+	(S, ["a", B, "d"]),
+	(S, ["c", A, "d"]),
+	(S, ["c", B, "b"]),
+	(A, [X]),
+	(B, [X]),
+	(X, ["x"])
+)
+closure(rules.first, print)
+closure(rules.follow, print)
+print(rules)
+state = State(
+	rules,
+	(S, ["a", A, "b"], 1, ["$"]),
+	(S, ["a", B, "d"], 1, ["$"])
+)
+closure(state.entail, print)
