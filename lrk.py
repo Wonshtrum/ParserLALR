@@ -1,3 +1,6 @@
+from utils import Set, MultiDict
+
+
 class NT:
 	def __init__(self, name):
 		self.name = name
@@ -19,26 +22,6 @@ class _EOF:
 	def __str__(self):
 		return self.__repr__()
 EOF = _EOF()
-
-
-class Set(set):
-	def update(self, elements):
-		result = not self.issuperset(elements)
-		super().update(elements)
-		return result
-
-	def add(self, element):
-		result = element not in self
-		super().add(element)
-		return result
-
-
-class MultiDict(dict):
-	def put(self, key, value):
-		if key in self:
-			self[key].append(value)
-		else:
-			self[key] = [value]
 
 
 class Rules(dict):
@@ -111,10 +94,15 @@ class Rule:
 
 
 class State(dict):
-	def __init__(self, rules, *positions):
+	id = 0
+	def get_id(self):
+		State.id += 1
+		return State.id
+
+	def __init__(self, *positions):
 		super().__init__()
-		self.rules = rules
 		self.add_positions(*positions)
+		self.id = self.get_id()
 
 	def add_position(self, product, tokens, position=0, look=None):
 		key = (product, *tokens, position)
@@ -131,8 +119,8 @@ class State(dict):
 	def add_rule(self, rule, look=None):
 		for tokens in rule.tokens:
 			self.add_position(rule.product, tokens, 0, look)
-	
-	def entail(self):
+
+	def entail(self, rules):
 		dirty = False
 		new = []
 		for position in self.values():
@@ -142,35 +130,44 @@ class State(dict):
 			dirty = True
 			at = position.at()
 			if isinstance(at, NT):
-				rule = self.rules[at]
+				rule = rules[at]
 				if position.on_last():
 					next = rule.follow
 				elif isinstance(position.next(), NT):
-					next = self.rules[position.next()].first
+					next = rules[position.next()].first
 				else:
-					next = position.next()
+					next = [position.next()]
 				new.append((rule, next))
 		for rule, next in new:
 			self.add_rule(rule, next)
 		return dirty
-	
+
 	def tree(self):
 		shift = {}
-		reduce = MultiDict()
+		reduce = {}
 		for position in self.values():
 			if position.on_end():
 				for at in position.look:
-					reduce.put(at, position)
+					if at in reduce:
+						print("reduce/reduce conflict:", at, "(", position, ")")
+						print(self)
+					else:
+						reduce[at] = position
 			else:
 				at = position.at()
 				if at in shift:
 					shift[at].add_position(*position.advance())
 				else:
-					shift[at] = State(self.rules, position.advance())
+					shift[at] = State(position.advance())
+		for at in reduce.keys():
+			if at in shift:
+				del shift[at]
+				print("shift/reduce conflict:", at)
+				print(self)
 		return shift, reduce
 
 	def __repr__(self):
-		return "\n".join(str(position) for position in self.values())
+		return f"State_{self.id}:\n"+"\n".join(str(position) for position in self.values())
 	
 	def __str__(self):
 		return self.__repr__()
@@ -195,7 +192,7 @@ class Position:
 
 	def on_last(self):
 		return self.position+1 == len(self.tokens)
-	
+
 	def on_end(self):
 		return self.position == len(self.tokens)
 
@@ -208,72 +205,21 @@ class Position:
 		return self.__repr__()
 
 
-def closure(f, verbose=lambda x:None):
+def closure(f, args=[], kwargs={}, verbose=lambda x:None):
 	i = 0
-	while f():
+	while f(*args, **kwargs):
 		i += 1
 		verbose(i)
 	print("closure after", i)
 
 
-Start = NT("Start")
-Add = NT("Add")
-Factor = NT("Factor")
-Term = NT("Term")
-rules = Rules(
-	(Start, [Add], [EOF]),
-	(Add, [Add, "+", Factor]),
-	(Add, [Factor]),
-	(Factor, [Factor, "*", Term]),
-	(Factor, [Term]),
-	(Term, ["(", Add, ")"]),
-	(Term, ["0"]),
-	(Term, ["1"])
-)
-closure(rules.first)
-closure(rules.follow)
-print(rules)
-state = State(
-	rules,
-	(Add, [Add, "+", Factor], 2, ["+", ")", EOF])
-)
-closure(state.entail)
-print("--------------------")
-print(state)
-state = State(
-	rules,
-	(Term, ["(", Add, ")"], 1, ["*", "+", ")", EOF])
-)
-closure(state.entail)
-print("--------------------")
-print(state)
-print("\n====================")
-
-
-SS = NT("S'")
-S = NT("S")
-A = NT("A")
-B = NT("B")
-X = NT("X")
-rules = Rules(
-	(SS, [S, EOF]),
-	(S, ["a", A, "b"]),
-	(S, ["a", B, "d"]),
-	(S, ["c", A, "d"]),
-	(S, ["c", B, "b"]),
-	(A, [X]),
-	(B, [X]),
-	(X, ["x"])
-)
-closure(rules.first)
-closure(rules.follow)
-print(rules)
-state = State(
-	rules,
-	(S, ["a", A, "b"], 1, [EOF]),
-	(S, ["a", B, "d"], 1, [EOF])
-)
-closure(state.entail)
-print("--------------------")
-print(state)
-print("\n====================")
+def unroll(rules, START):
+	ACCEPT = NT("__ACCEPT__")
+	position = (ACCEPT, [START, EOF])
+	rules.add_rule(*position)
+	state = State(position)
+	
+	closure(rules.first)
+	closure(rules.follow)
+	closure(state.entail, args=(rules,))
+	return rules, state
