@@ -195,6 +195,9 @@ class Position:
 
 	def on_end(self):
 		return self.position == len(self.tokens)
+	
+	def __eq__(self, other):
+		return self.product == other.product and self.position == other.position and self.tokens == other.tokens and self.look == other.look
 
 	def __repr__(self):
 		return f"{self.product} {'=' if self.visited else '-'}> "+" ".join(("." if i == self.position else "")+str(token)
@@ -210,7 +213,6 @@ def closure(f, args=[], kwargs={}, verbose=lambda x:None):
 	while f(*args, **kwargs):
 		i += 1
 		verbose(i)
-	print("closure after", i)
 
 
 def unroll(rules, START):
@@ -221,5 +223,41 @@ def unroll(rules, START):
 	
 	closure(rules.first)
 	closure(rules.follow)
-	closure(state.entail, args=(rules,))
-	return rules, state
+
+	goto = {}
+	states = {}
+	stack = [[state]]
+
+	while stack:
+		while stack[-1]:
+			state = stack[-1].pop()
+			closure(state.entail, args=(rules,))
+			print("===============================================")
+			print(state)
+			for other in states.values():
+				if state == other:
+					print("merging", state.id, other.id)
+					for k, v in goto.items():
+						if v == state.id:
+							print("yes")
+							goto[k] = other.id
+					break
+			else:
+				states[state.id] = state
+
+				shift, reduce = state.tree()
+				stack.append(list(shift.values()))
+				l = len(stack)
+				for k, v in shift.items():
+					key = (k, state.id)
+					if key in goto:
+						print("transition already in table")
+					goto[key] = v.id
+					print("\n"+"-"*l, k,":")
+					print("-"*l, str(v).replace("\n","\n"+"-"*l+" "))
+				print("-----------------------------------------------")
+				print(list(reduce.keys()))
+				input("waiting")
+		stack.pop()
+
+	return rules, goto, states

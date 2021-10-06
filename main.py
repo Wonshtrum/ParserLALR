@@ -13,4 +13,4 @@ rules = Rules(
 	(Term, ["0"]),
 	(Term, ["1"]),
 )
-rules, state = unroll(rules, Add)
+rules, goto, states = unroll(rules, Add)
