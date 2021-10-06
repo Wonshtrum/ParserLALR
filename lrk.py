@@ -1,13 +1,13 @@
 class NT:
 	def __init__(self, name):
 		self.name = name
-	
+
 	def __len__(self):
 		return len(self.name)
-	
+
 	def __repr__(self):
 		return self.name
-	
+
 	def __str__(self):
 		return self.__repr__()
 
@@ -15,21 +15,30 @@ class NT:
 class _EOF:
 	def __repr__(self):
 		return "$"
-	
+
 	def __str__(self):
 		return self.__repr__()
 EOF = _EOF()
+
 
 class Set(set):
 	def update(self, elements):
 		result = not self.issuperset(elements)
 		super().update(elements)
 		return result
-	
+
 	def add(self, element):
 		result = element not in self
 		super().add(element)
 		return result
+
+
+class MultiDict(dict):
+	def put(self, key, value):
+		if key in self:
+			self[key].append(value)
+		else:
+			self[key] = [value]
 
 
 class Rules(dict):
@@ -46,7 +55,7 @@ class Rules(dict):
 	def add_rules(self, *rules):
 		for rule in rules:
 			self.add_rule(*rule)
-	
+
 	def follow(self):
 		dirty = False
 		for rule in self.values():
@@ -62,7 +71,7 @@ class Rules(dict):
 						else:
 							dirty = self[nt].follow.add(token) or dirty
 		return dirty
-	
+
 	def first(self):
 		dirty = False
 		for rule in self.values():
@@ -87,7 +96,7 @@ class Rule:
 		self.tokens = [] if tokens is None else [tokens]
 		self.follow = Set() if follow is None else Set(follow)
 		self.first = Set()
-	
+
 	def __repr__(self): 
 		return f"{self.product} -> "+f"\n{' '*len(self.product)}  > ".join(
 			" ".join(str(token)
@@ -114,7 +123,7 @@ class State(dict):
 				self[key].look.update(look)
 		else:
 			self[key] = Position(product, tokens, position, look)
-	
+
 	def add_positions(self, *positions):
 		for position in positions:
 			self.add_position(*position)
@@ -127,14 +136,14 @@ class State(dict):
 		dirty = False
 		new = []
 		for position in self.values():
-			if position.visited:
+			if position.visited or position.on_end():
 				continue
 			position.visited = True
 			dirty = True
 			at = position.at()
 			if isinstance(at, NT):
 				rule = self.rules[at]
-				if position.last():
+				if position.on_last():
 					next = rule.follow
 				elif isinstance(position.next(), NT):
 					next = self.rules[position.next()].first
@@ -144,6 +153,21 @@ class State(dict):
 		for rule, next in new:
 			self.add_rule(rule, next)
 		return dirty
+	
+	def tree(self):
+		shift = {}
+		reduce = MultiDict()
+		for position in self.values():
+			if position.on_end():
+				for at in position.look:
+					reduce.put(at, position)
+			else:
+				at = position.at()
+				if at in shift:
+					shift[at].add_position(*position.advance())
+				else:
+					shift[at] = State(self.rules, position.advance())
+		return shift, reduce
 
 	def __repr__(self):
 		return "\n".join(str(position) for position in self.values())
@@ -159,16 +183,22 @@ class Position:
 		self.position = position
 		self.look = Set() if look is None else Set(look)
 		self.visited = False
-	
+
+	def advance(self):
+		return self.product, self.tokens, self.position+1, self.look
+
 	def at(self):
 		return self.tokens[self.position]
-	
+
 	def next(self):
 		return self.tokens[self.position+1]
-	
-	def last(self):
+
+	def on_last(self):
 		return self.position+1 == len(self.tokens)
 	
+	def on_end(self):
+		return self.position == len(self.tokens)
+
 	def __repr__(self):
 		return f"{self.product} {'=' if self.visited else '-'}> "+" ".join(("." if i == self.position else "")+str(token)
 		for i, token in enumerate(self.tokens))+"\t\t -- {"+", ".join(str(token)
@@ -214,18 +244,20 @@ state = State(
 	rules,
 	(Term, ["(", Add, ")"], 1, ["*", "+", ")", EOF])
 )
-closure(state.entail, lambda x:print(x,"\n",state))
+closure(state.entail)
 print("--------------------")
 print(state)
 print("\n====================")
 
 
+SS = NT("S'")
 S = NT("S")
 A = NT("A")
 B = NT("B")
 X = NT("X")
 rules = Rules(
-	(S, ["a", A, "b"], [EOF]),
+	(SS, [S, EOF]),
+	(S, ["a", A, "b"]),
 	(S, ["a", B, "d"]),
 	(S, ["c", A, "d"]),
 	(S, ["c", B, "b"]),
