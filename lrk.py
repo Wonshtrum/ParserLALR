@@ -29,11 +29,12 @@ class Rules(dict):
 		super().__init__()
 		self.add_rules(*rules)
 
-	def add_rule(self, product, tokens, follow=None):
+	def add_rule(self, product, tokens, method=None, follow=None):
+		entry = RuleEntry(tokens, method)
 		if product in self:
-			self[product].tokens.append(tokens)
+			self[product].entries.append(entry)
 		else:
-			self[product] = Rule(product, tokens, follow)
+			self[product] = Rule(product, entry, follow)
 
 	def add_rules(self, *rules):
 		for rule in rules:
@@ -42,7 +43,8 @@ class Rules(dict):
 	def follow(self):
 		dirty = False
 		for rule in self.values():
-			for tokens in rule.tokens:
+			for entry in rule.entries:
+				tokens = entry.tokens
 				end = tokens[-1]
 				if isinstance(end, NT):
 					dirty = self[end].follow.update(rule.follow) or dirty
@@ -58,14 +60,14 @@ class Rules(dict):
 	def first(self):
 		dirty = False
 		for rule in self.values():
-			for tokens in rule.tokens:
-				first = tokens[0]
+			for entry in rule.entries:
+				first = entry.tokens[0]
 				if isinstance(first, NT):
 					dirty = rule.first.update(self[first].first) or dirty
 				else:
 					dirty = rule.first.add(first) or dirty
 		return dirty
-
+	
 	def __repr__(self):
 		return "\n".join(str(rule) for rule in self.values())
 
@@ -73,24 +75,31 @@ class Rules(dict):
 		return self.__repr__()
 
 
+class RuleEntry:
+	def __init__(self, tokens, method=None):
+		self.tokens = tokens
+		self.method = method
+		self.length = len(tokens)
+
+	def action(self):
+		return self.length, self.method
+
+
 class Rule:
-	def __init__(self, product, tokens=None, follow=None):
+	def __init__(self, product, entry=None, follow=None):
 		self.product = product
-		self.tokens = [] if tokens is None else [tokens]
+		self.entries = [] if entry is None else [entry]
 		self.follow = Set() if follow is None else Set(follow)
 		self.first = Set()
 	
-	def __getitem__(self, key):
-		return (self.product, self.tokens[key], self.follow, self.first)
-
 	def __repr__(self): 
 		return f"{self.product} -> "+f"\n{' '*len(self.product)}  > ".join(
 			" ".join(str(token)
-			for token in tokens)
+			for token in entry.tokens)
 			+("" if i else "\t\t -- {"+", ".join(str(_)
 			for _ in self.follow)+"} {"+", ".join(str(_)
 			for _ in self.first)+"}")
-			for i, tokens in enumerate(self.tokens))
+			for i, entry in enumerate(self.entries))
 
 	def __str__(self):
 		return self.__repr__()
@@ -107,21 +116,21 @@ class State(dict):
 		self.id = self.get_id()
 		self.add_positions(*positions)
 
-	def add_position(self, rule_id, product, tokens, position=0, look=None):
+	def add_position(self, rule_id, product, entry, position=0, look=None):
 		key = (rule_id, position)
 		if key in self:
 			if look is not None:
 				self[key].look.update(look)
 		else:
-			self[key] = Position(rule_id, product, tokens, position, look)
+			self[key] = Position(rule_id, product, entry, position, look)
 
 	def add_positions(self, *positions):
 		for position in positions:
 			self.add_position(*position)
 
 	def add_rule(self, rule, look=None):
-		for i, tokens in enumerate(rule.tokens):
-			self.add_position((rule.product, i), rule.product, tokens, 0, look)
+		for i, entry in enumerate(rule.entries):
+			self.add_position((rule.product, i), rule.product, entry, 0, look)
 	
 	def can_merge(self, other):
 		return self.keys() == other.keys()
@@ -158,7 +167,7 @@ class State(dict):
 						print("reduce/reduce conflict:", at, "(", position, ")")
 						print(self)
 					else:
-						reduce[at] = position.rule_id
+						reduce[at] = position.entry.action()
 			else:
 				at = position.at()
 				if at in shift:
@@ -180,28 +189,28 @@ class State(dict):
 
 
 class Position:
-	def __init__(self, rule_id, product, tokens, position=0, look=None):
+	def __init__(self, rule_id, product, entry, position=0, look=None):
 		self.rule_id = rule_id
 		self.product = product
-		self.tokens = tokens
+		self.entry = entry
 		self.position = position
 		self.look = Set() if look is None else Set(look)
 		self.visited = False
 
 	def advance(self):
-		return self.rule_id, self.product, self.tokens, self.position+1, self.look
+		return self.rule_id, self.product, self.entry, self.position+1, self.look
 
 	def at(self):
-		return self.tokens[self.position]
+		return self.entry.tokens[self.position]
 
 	def next(self):
-		return self.tokens[self.position+1]
+		return self.entry.tokens[self.position+1]
 
 	def on_last(self):
-		return self.position+1 == len(self.tokens)
+		return self.position+1 == self.entry.length
 
 	def on_end(self):
-		return self.position == len(self.tokens)
+		return self.position == self.entry.length
 	
 	def can_merge(self, other):
 		return self.rule_id == other.rule_id and self.position == other.position
@@ -211,7 +220,7 @@ class Position:
 
 	def __repr__(self):
 		return f"{self.product} {'=' if self.visited else '-'}> "+" ".join(("." if i == self.position else "")+str(token)
-		for i, token in enumerate(self.tokens))+"\t\t -- {"+", ".join(str(token)
+		for i, token in enumerate(self.entry.tokens))+"\t\t -- {"+", ".join(str(token)
 		for token in self.look)+"}"
 
 	def __str__(self):
