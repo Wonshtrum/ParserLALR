@@ -15,13 +15,18 @@ class NT:
 		return self.__repr__()
 
 
-class _EOF:
+class Constant:
+	def __init__(self, repr):
+		self.repr = repr
+
 	def __repr__(self):
-		return "$"
+		return self.repr
 
 	def __str__(self):
 		return self.__repr__()
-EOF = _EOF()
+
+EOF = Constant("$")
+ACCEPT = Constant("@")
 
 
 class Rules(dict):
@@ -30,7 +35,7 @@ class Rules(dict):
 		self.add_rules(*rules)
 
 	def add_rule(self, product, tokens, method=None, follow=None):
-		entry = RuleEntry(tokens, method)
+		entry = RuleEntry(product, tokens, method)
 		if product in self:
 			self[product].entries.append(entry)
 		else:
@@ -76,13 +81,16 @@ class Rules(dict):
 
 
 class RuleEntry:
-	def __init__(self, tokens, method=None):
+	def __init__(self, product, tokens, method=None):
+		if method is None:
+			method = lambda *args: args[0] if len(args) == 1 else args
+		self.product = product
 		self.tokens = tokens
 		self.method = method
 		self.length = len(tokens)
 
 	def action(self):
-		return self.length, self.method
+		return self.product, self.length, self.method
 
 
 class Rule:
@@ -233,6 +241,7 @@ def closure(f, args=[], kwargs={}, verbose=lambda x:None):
 		i += 1
 		verbose(i)
 
+
 def group(goto):
 	result = {}
 	for (token, state), v in goto.items():
@@ -243,11 +252,11 @@ def group(goto):
 	return result
 
 
-def unroll(rules, START):
-	ACCEPT = NT("__ACCEPT__")
-	rules.add_rule(ACCEPT, [START, EOF])
+def unroll(rules, start):
+	accept = NT("__ACCEPT__")
+	rules.add_rule(accept, [start, EOF])
 	origin = State()
-	origin.add_rule(rules[ACCEPT])
+	origin.add_rule(rules[accept])
 	
 	closure(rules.first)
 	closure(rules.follow)
@@ -304,8 +313,6 @@ def unroll(rules, START):
 	active_states = set()
 	for (token, state), v in goto.items():
 		active_states.add(merge[state])
-		if isinstance(v, int):
-			active_states.add(merge[v])
 		merge_goto[(token, merge[state])] = merge[v] if isinstance(v, int) else v
 
 	active_states = sorted(active_states)
@@ -315,7 +322,7 @@ def unroll(rules, START):
 	small_goto = {}
 	small_states = {}
 	for (token, state), v in merge_goto.items():
-		small_goto[(token, small[state])] = small[v] if isinstance(v, int) else v
+		small_goto[(token, small[state])] = small.get(v, ACCEPT) if isinstance(v, int) else v
 
 	for k, v in states.items():
 		if k in small:
@@ -327,3 +334,41 @@ def unroll(rules, START):
 		print(state, ":", grouped.get(state))
 
 	return rules, small_goto, small_states
+
+
+def parse(goto, tokens):
+	states = [0]
+	stack = []
+	tree = []
+	tokens.append(EOF)
+	next = tokens[0]
+	while tokens:
+		token = tokens[0]
+		state = states[-1]
+		print(states, tokens, stack)
+		result = goto[(token, state)]
+		print(result, tree)
+		if result is ACCEPT:
+			print("ACCEPT")
+			break
+		elif isinstance(result, int):
+			# shift
+			states.append(result)
+			tokens.pop(0)
+			stack.append(token)
+			tree.append(next)
+			next = tokens[0]
+		else:
+			# reduce
+			product, length, method = result
+			next = method(*tree[-length:])
+			tree = tree[:-length]
+			stack = stack[:-length]
+			states = states[:-length]
+			tokens.insert(0, product)
+	
+	t = str(tree)
+	for _ in "',[]":
+		t = t.replace(_, "")
+	print(t)
+	return tree

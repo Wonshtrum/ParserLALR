@@ -1,4 +1,4 @@
-from lrk import NT, Rules, unroll
+from lrk import NT, Rules, unroll, parse
 
 
 Add = NT("Add")
@@ -21,6 +21,7 @@ B = NT("B")
 rules = Rules(
 	(E, [E, "*", B]),
 	(E, [E, "+", B]),
+	(E, [B, "-", E]),
 	(E, [B]),
 	(B, ["0"]),
 	(B, ["1"]),
