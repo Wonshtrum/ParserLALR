@@ -14,3 +14,15 @@ rules = Rules(
 	(Term, ["1"]),
 )
 rules, goto, states = unroll(rules, Add)
+
+
+E = NT("E")
+B = NT("B")
+rules = Rules(
+	(E, [E, "*", B]),
+	(E, [E, "+", B]),
+	(E, [B]),
+	(B, ["0"]),
+	(B, ["1"]),
+)
+rules, goto, states = unroll(rules, E)

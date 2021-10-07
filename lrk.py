@@ -79,6 +79,9 @@ class Rule:
 		self.tokens = [] if tokens is None else [tokens]
 		self.follow = Set() if follow is None else Set(follow)
 		self.first = Set()
+	
+	def __getitem__(self, key):
+		return (self.product, self.tokens[key], self.follow, self.first)
 
 	def __repr__(self): 
 		return f"{self.product} -> "+f"\n{' '*len(self.product)}  > ".join(
@@ -101,24 +104,24 @@ class State(dict):
 
 	def __init__(self, *positions):
 		super().__init__()
-		self.add_positions(*positions)
 		self.id = self.get_id()
+		self.add_positions(*positions)
 
-	def add_position(self, product, tokens, position=0, look=None):
-		key = (product, *tokens, position)
+	def add_position(self, rule_id, product, tokens, position=0, look=None):
+		key = (rule_id, position)
 		if key in self:
 			if look is not None:
 				self[key].look.update(look)
 		else:
-			self[key] = Position(product, tokens, position, look)
+			self[key] = Position(rule_id, product, tokens, position, look)
 
 	def add_positions(self, *positions):
 		for position in positions:
 			self.add_position(*position)
 
 	def add_rule(self, rule, look=None):
-		for tokens in rule.tokens:
-			self.add_position(rule.product, tokens, 0, look)
+		for i, tokens in enumerate(rule.tokens):
+			self.add_position((rule.product, i), rule.product, tokens, 0, look)
 
 	def entail(self, rules):
 		dirty = False
@@ -152,7 +155,7 @@ class State(dict):
 						print("reduce/reduce conflict:", at, "(", position, ")")
 						print(self)
 					else:
-						reduce[at] = position
+						reduce[at] = position.rule_id
 			else:
 				at = position.at()
 				if at in shift:
@@ -174,7 +177,8 @@ class State(dict):
 
 
 class Position:
-	def __init__(self, product, tokens, position=0, look=None):
+	def __init__(self, rule_id, product, tokens, position=0, look=None):
+		self.rule_id = rule_id
 		self.product = product
 		self.tokens = tokens
 		self.position = position
@@ -182,7 +186,7 @@ class Position:
 		self.visited = False
 
 	def advance(self):
-		return self.product, self.tokens, self.position+1, self.look
+		return self.rule_id, self.product, self.tokens, self.position+1, self.look
 
 	def at(self):
 		return self.tokens[self.position]
@@ -217,14 +221,15 @@ def closure(f, args=[], kwargs={}, verbose=lambda x:None):
 
 def unroll(rules, START):
 	ACCEPT = NT("__ACCEPT__")
-	position = (ACCEPT, [START, EOF])
-	rules.add_rule(*position)
-	state = State(position)
+	rules.add_rule(ACCEPT, [START, EOF])
+	state = State()
+	state.add_rule(rules[ACCEPT])
 	
 	closure(rules.first)
 	closure(rules.follow)
 
 	goto = {}
+	merge = {}
 	states = {}
 	stack = [[state]]
 
@@ -237,13 +242,11 @@ def unroll(rules, START):
 			for other in states.values():
 				if state == other:
 					print("merging", state.id, other.id)
-					for k, v in goto.items():
-						if v == state.id:
-							print("yes")
-							goto[k] = other.id
+					merge[state.id] = other.id
 					break
 			else:
 				states[state.id] = state
+				merge[state.id] = state.id
 
 				shift, reduce = state.tree()
 				stack.append(list(shift.values()))
@@ -255,9 +258,22 @@ def unroll(rules, START):
 					goto[key] = v.id
 					print("\n"+"-"*l, k,":")
 					print("-"*l, str(v).replace("\n","\n"+"-"*l+" "))
+				for k, v in reduce.items():
+					key = (k, state.id)
+					if key in goto:
+						print("transition already in table")
+					goto[key] = v
 				print("-----------------------------------------------")
 				print(list(reduce.keys()))
-				input("waiting")
 		stack.pop()
 
-	return rules, goto, states
+	small_goto = {}
+	small_states = {}
+	small = {k:i for i, k in enumerate(states.keys())}
+	for (token, state), v in goto.items():
+		small_goto[(token, small[merge[state]])] = small[merge[v]] if isinstance(v, int) else v
+	for k, v in states.items():
+		small_states[small[k]] = v
+		v.id = small[k]
+
+	return rules, small_goto, small_states
