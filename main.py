@@ -14,7 +14,7 @@ rules = Rules(
 	(Term, ["1"]),
 )
 rules, goto, states = unroll(rules, Add)
-
+input()
 
 E = NT("E")
 B = NT("B")
@@ -26,3 +26,14 @@ rules = Rules(
 	(B, ["1"]),
 )
 rules, goto, states = unroll(rules, E)
+input()
+
+E = NT("E")
+B = NT("B")
+rules = Rules(
+	(E, [B, B]),
+	(B, ["c", B]),
+	(B, ["d"]),
+)
+rules, goto, states = unroll(rules, E)
+input()

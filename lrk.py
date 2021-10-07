@@ -122,6 +122,9 @@ class State(dict):
 	def add_rule(self, rule, look=None):
 		for i, tokens in enumerate(rule.tokens):
 			self.add_position((rule.product, i), rule.product, tokens, 0, look)
+	
+	def can_merge(self, other):
+		return self.keys() == other.keys()
 
 	def entail(self, rules):
 		dirty = False
@@ -200,8 +203,11 @@ class Position:
 	def on_end(self):
 		return self.position == len(self.tokens)
 	
+	def can_merge(self, other):
+		return self.rule_id == other.rule_id and self.position == other.position
+	
 	def __eq__(self, other):
-		return self.product == other.product and self.position == other.position and self.tokens == other.tokens and self.look == other.look
+		return self.rule_id == other.rule_id and self.position == other.position and self.look == other.look
 
 	def __repr__(self):
 		return f"{self.product} {'=' if self.visited else '-'}> "+" ".join(("." if i == self.position else "")+str(token)
@@ -218,12 +224,21 @@ def closure(f, args=[], kwargs={}, verbose=lambda x:None):
 		i += 1
 		verbose(i)
 
+def group(goto):
+	result = {}
+	for (token, state), v in goto.items():
+		if state in result:
+			result[state][token] = v
+		else:
+			result[state] = {token:v}
+	return result
+
 
 def unroll(rules, START):
 	ACCEPT = NT("__ACCEPT__")
 	rules.add_rule(ACCEPT, [START, EOF])
-	state = State()
-	state.add_rule(rules[ACCEPT])
+	origin = State()
+	origin.add_rule(rules[ACCEPT])
 	
 	closure(rules.first)
 	closure(rules.follow)
@@ -231,7 +246,7 @@ def unroll(rules, START):
 	goto = {}
 	merge = {}
 	states = {}
-	stack = [[state]]
+	stack = [[origin]]
 
 	while stack:
 		while stack[-1]:
@@ -267,13 +282,39 @@ def unroll(rules, START):
 				print(list(reduce.keys()))
 		stack.pop()
 
+	state_list = list(states.values())
+	grouped = group(goto)
+	for i, state in enumerate(state_list):
+		for other in state_list[i+1:]:
+			if state.can_merge(other):
+				print("merging", state.id, other.id)
+				print(" ->", grouped[state.id], grouped[other.id])
+				merge[state.id] = merge[other.id]
+
+	merge_goto = {}
+	active_states = set()
+	for (token, state), v in goto.items():
+		active_states.add(merge[state])
+		if isinstance(v, int):
+			active_states.add(merge[v])
+		merge_goto[(token, merge[state])] = merge[v] if isinstance(v, int) else v
+
+	active_states = sorted(active_states)
+	if active_states[0] != origin.id:
+		print("Error: origin state mangled")
+	small = {k:i for i, k in enumerate(active_states)}
 	small_goto = {}
 	small_states = {}
-	small = {k:i for i, k in enumerate(states.keys())}
-	for (token, state), v in goto.items():
-		small_goto[(token, small[merge[state]])] = small[merge[v]] if isinstance(v, int) else v
+	for (token, state), v in merge_goto.items():
+		small_goto[(token, small[state])] = small[v] if isinstance(v, int) else v
+
 	for k, v in states.items():
-		small_states[small[k]] = v
-		v.id = small[k]
+		if k in small:
+			small_states[small[k]] = v
+			v.id = small[k]
+
+	grouped = group(small_goto)
+	for state in range(len(active_states)):
+		print(state, ":", grouped.get(state))
 
 	return rules, small_goto, small_states
