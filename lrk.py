@@ -1,6 +1,10 @@
 from utils import Set, MultiDict
 
 
+debug = print
+debug = lambda *args, **kwargs: None
+
+
 class NT:
 	def __init__(self, name):
 		self.name = name
@@ -72,7 +76,7 @@ class Rules(dict):
 				else:
 					dirty = rule.first.add(first) or dirty
 		return dirty
-	
+
 	def __repr__(self):
 		return "\n".join(str(rule) for rule in self.values())
 
@@ -99,7 +103,7 @@ class Rule:
 		self.entries = [] if entry is None else [entry]
 		self.follow = Set() if follow is None else Set(follow)
 		self.first = Set()
-	
+
 	def __repr__(self): 
 		return f"{self.product} -> "+f"\n{' '*len(self.product)}  > ".join(
 			" ".join(str(token)
@@ -139,7 +143,7 @@ class State(dict):
 	def add_rule(self, rule, look=None):
 		for i, entry in enumerate(rule.entries):
 			self.add_position((rule.product, i), rule.product, entry, 0, look)
-	
+
 	def can_merge(self, other):
 		return self.keys() == other.keys()
 
@@ -174,6 +178,7 @@ class State(dict):
 					if at in reduce:
 						print("reduce/reduce conflict:", at, "(", position, ")")
 						print(self)
+						input()
 					else:
 						reduce[at] = position.entry.action()
 			else:
@@ -187,11 +192,12 @@ class State(dict):
 				del shift[at]
 				print("shift/reduce conflict:", at)
 				print(self)
+				input()
 		return shift, reduce
 
 	def __repr__(self):
 		return f"State_{self.id}:\n"+"\n".join(str(position) for position in self.values())
-	
+
 	def __str__(self):
 		return self.__repr__()
 
@@ -219,10 +225,10 @@ class Position:
 
 	def on_end(self):
 		return self.position == self.entry.length
-	
+
 	def can_merge(self, other):
 		return self.rule_id == other.rule_id and self.position == other.position
-	
+
 	def __eq__(self, other):
 		return self.rule_id == other.rule_id and self.position == other.position and self.look == other.look
 
@@ -257,7 +263,7 @@ def unroll(rules, start):
 	rules.add_rule(accept, [start, EOF])
 	origin = State()
 	origin.add_rule(rules[accept])
-	
+
 	closure(rules.first)
 	closure(rules.follow)
 
@@ -270,11 +276,11 @@ def unroll(rules, start):
 		while stack[-1]:
 			state = stack[-1].pop()
 			closure(state.entail, args=(rules,))
-			print("===============================================")
-			print(state)
+			debug("===============================================")
+			debug(state)
 			for other in states.values():
 				if state == other:
-					print("merging", state.id, other.id)
+					debug("merging", state.id, other.id)
 					merge[state.id] = other.id
 					break
 			else:
@@ -288,16 +294,18 @@ def unroll(rules, start):
 					key = (k, state.id)
 					if key in goto:
 						print("transition already in table")
+						input()
 					goto[key] = v.id
-					print("\n"+"-"*l, k,":")
-					print("-"*l, str(v).replace("\n","\n"+"-"*l+" "))
+					debug("\n"+"-"*l, k,":")
+					debug("-"*l, str(v).replace("\n","\n"+"-"*l+" "))
 				for k, v in reduce.items():
 					key = (k, state.id)
 					if key in goto:
 						print("transition already in table")
+						input()
 					goto[key] = v
-				print("-----------------------------------------------")
-				print(list(reduce.keys()))
+				debug("-----------------------------------------------")
+				debug(list(reduce.keys()))
 		stack.pop()
 
 	state_list = list(states.values())
@@ -305,8 +313,8 @@ def unroll(rules, start):
 	for i, state in enumerate(state_list):
 		for other in state_list[i+1:]:
 			if state.can_merge(other):
-				print("merging", state.id, other.id)
-				print(" ->", grouped[state.id], grouped[other.id])
+				debug("merging", state.id, other.id)
+				debug(" ->", grouped[state.id], grouped[other.id])
 				merge[state.id] = merge[other.id]
 
 	merge_goto = {}
@@ -318,6 +326,7 @@ def unroll(rules, start):
 	active_states = sorted(active_states)
 	if active_states[0] != origin.id:
 		print("Error: origin state mangled")
+		input()
 	small = {k:i for i, k in enumerate(active_states)}
 	small_goto = {}
 	small_states = {}
@@ -337,38 +346,38 @@ def unroll(rules, start):
 
 
 def parse(goto, tokens):
+	grouped = group(goto)
 	states = [0]
 	stack = []
 	tree = []
-	tokens.append(EOF)
-	next = tokens[0]
 	while tokens:
 		token = tokens[0]
 		state = states[-1]
-		print(states, tokens, stack)
-		result = goto[(token, state)]
-		print(result, tree)
+		debug(states, tokens, stack)
+		if (token.type, state) not in goto:
+			print("Unexpected token:", token)
+			print("Expeted:", ", ".join(_ for _ in grouped[state] if not isinstance(_, NT)))
+			return None
+		result = goto[(token.type, state)]
+		debug(result, tree)
 		if result is ACCEPT:
 			print("ACCEPT")
-			break
+			return tree[0]
 		elif isinstance(result, int):
 			# shift
 			states.append(result)
 			tokens.pop(0)
-			stack.append(token)
-			tree.append(next)
-			next = tokens[0]
+			stack.append(token.type)
+			tree.append(token.value)
 		else:
 			# reduce
 			product, length, method = result
-			next = method(*tree[-length:])
+			args = tree[-length:]
 			tree = tree[:-length]
 			stack = stack[:-length]
 			states = states[:-length]
-			tokens.insert(0, product)
-	
-	t = str(tree)
-	for _ in "',[]":
-		t = t.replace(_, "")
-	print(t)
-	return tree
+			tree.append(method(*args))
+			stack.append(product)
+			states.append(goto[(product, states[-1])])
+	print("INVALID")
+	return None
