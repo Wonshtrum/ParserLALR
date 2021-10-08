@@ -1,4 +1,4 @@
-from lexer import Lexer, token
+from lalr.lexer import Lexer, token
 
 
 class LexerMath(Lexer):

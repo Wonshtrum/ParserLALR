@@ -1,5 +1,5 @@
-from parser import Parser, production
-from lrk import NT
+from lalr.parser import Parser, production
+from lalr.lrk import NT
 
 
 Add = NT("Add")

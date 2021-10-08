@@ -1,4 +1,4 @@
-from lrk import Rules, unroll, parse
+from .lrk import Rules, unroll, parse
 
 
 def production(*tokens, out="S"):

@@ -1,4 +1,4 @@
-from utils import Set, MultiDict
+from .utils import Set
 
 
 debug = print

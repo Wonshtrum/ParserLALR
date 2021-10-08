@@ -11,4 +11,5 @@ if error:
 else:
 	t = time()
 	result = ParserJSON.parse(tokens)
+	print(result)
 	print(time()-t)

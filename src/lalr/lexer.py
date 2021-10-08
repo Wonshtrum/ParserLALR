@@ -1,5 +1,5 @@
-from lrk import EOF
-from errors import Illegal_Token
+from .lrk import EOF
+from .errors import Illegal_Token
 import re
 
 
