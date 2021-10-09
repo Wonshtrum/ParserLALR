@@ -1,4 +1,5 @@
-from .utils import Set
+from .utils import Set, enum_list
+from .errors import Illegal_Token
 
 
 debug = print
@@ -309,12 +310,10 @@ def unroll(rules, start):
 		stack.pop()
 
 	state_list = list(states.values())
-	grouped = group(goto)
 	for i, state in enumerate(state_list):
 		for other in state_list[i+1:]:
 			if state.can_merge(other):
 				debug("merging", state.id, other.id)
-				debug(" ->", grouped[state.id], grouped[other.id])
 				merge[state.id] = merge[other.id]
 
 	merge_goto = {}
@@ -338,46 +337,41 @@ def unroll(rules, start):
 			small_states[small[k]] = v
 			v.id = small[k]
 
-	grouped = group(small_goto)
-	for state in range(len(active_states)):
-		print(state, ":", grouped.get(state))
-
 	return rules, small_goto, small_states
 
 
-def parse(goto, tokens):
+def parse(goto, tokens, lexer):
 	grouped = group(goto)
 	states = [0]
 	stack = []
 	tree = []
-	while tokens:
-		token = tokens[0]
-		state = states[-1]
-		debug(states, tokens, stack)
-		if (token.type, state) not in goto:
-			print("Unexpected token:", token)
-			print("Expeted:", ", ".join(_ for _ in grouped[state] if not isinstance(_, NT)))
-			return None
-		result = goto[(token.type, state)]
-		debug(result, tree)
-		if result is ACCEPT:
-			print("ACCEPT")
-			return tree[0]
-		elif isinstance(result, int):
-			# shift
-			states.append(result)
-			tokens.pop(0)
-			stack.append(token.type)
-			tree.append(token.value)
-		else:
-			# reduce
-			product, length, method = result
-			args = tree[-length:]
-			tree = tree[:-length]
-			stack = stack[:-length]
-			states = states[:-length]
-			tree.append(method(*args))
-			stack.append(product)
-			states.append(goto[(product, states[-1])])
-	print("INVALID")
-	return None
+	try:
+		while tokens:
+			token = tokens[0]
+			state = states[-1]
+			debug(states, tokens, stack)
+			if (token.type, state) not in goto:
+				raise Illegal_Token(f"Syntax error: unexpected token {token}", lexer.file_name, lexer.text, token, note=f"expected: {enum_list([_ for _ in grouped[state] if not isinstance(_, NT)])}")
+			result = goto[(token.type, state)]
+			debug(result, tree)
+			if result is ACCEPT:
+				return tree[0], None
+			elif isinstance(result, int):
+				# shift
+				states.append(result)
+				tokens.pop(0)
+				stack.append(token.type)
+				tree.append(token.value)
+			else:
+				# reduce
+				product, length, method = result
+				args = tree[-length:]
+				tree = tree[:-length]
+				stack = stack[:-length]
+				states = states[:-length]
+				tree.append(method(*args))
+				stack.append(product)
+				states.append(goto[(product, states[-1])])
+	except Illegal_Token as error:
+		return None, error.format_error()
+	return None, None

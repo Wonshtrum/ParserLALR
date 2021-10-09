@@ -32,5 +32,5 @@ class Parser:
 		cls.ENTRIES = goto
 	
 	@classmethod
-	def parse(cls, tokens):
-		return parse(cls.ENTRIES, tokens)
+	def parse(cls, tokens, lexer):
+		return parse(cls.ENTRIES, tokens, lexer)

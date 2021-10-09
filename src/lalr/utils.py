@@ -21,5 +21,5 @@ class MultiDict(dict):
 def enum_list(l, join=", ", final="or ", quote='"'):
 	l = [f"{quote}{_}{quote}" for _ in l]
 	if len(l) > 1:
-		len[-1] = f"{final}{l[-1]}"
+		l[-1] = f"{final}{l[-1]}"
 	return join.join(l)

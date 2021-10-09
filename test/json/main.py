@@ -1,36 +1,31 @@
+from lalr.lexer import Lexer, token
 from lalr.parser import Parser, production
 from lalr.lrk import NT
+from time import time
 
 
-Add = NT("Add")
-Factor = NT("Factor")
-Term = NT("Term")
-class ParserMath(Parser):
-	START = Add
-	@production(Add, "+", Factor, out=Add)
-	def _(a, _1, f):
-		return [a, "+", f]
-	@production(Add, "-", Factor, out=Add)
-	def _(a, _1, f):
-		return [a, "-", f]
-	@production(Factor, "*", Term, out=Factor)
-	def _(f, _1, t):
-		return [f, "*", t]
-	@production(Factor, "/", Term, out=Factor)
-	def _(f, _1, t):
-		return [f, "/", t]
-	@production("(", Add, ")", out=Term)
-	def _(_1, a, _2):
-		return a
-	@production("num", out=Term)
-	def _(_1):
-		return _1
-	@production(Factor, out=Add)
-	def _(_1):
-		return _1
-	@production(Term, out=Factor)
-	def _(_1):
-		return _1
+class LexerJSON(Lexer):
+	ENTRIES = ["{", "}", "[", "]", ",", ":"]
+
+	@token("[-+]?([0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)")
+	def _(self, val):
+		return float(val), "num"
+	@token('"(\\"|[^"])*?"')
+	def _(self, val):
+		return val[1:-1], "str"
+	@token('\'(\\"|[^"])*?\'')
+	def _(self, val):
+		return val[1:-1], "str"
+	@token("true")
+	def _(self, val):
+		return True, "bool"
+	@token("false")
+	def _(self, val):
+		return False, "bool"
+	@token("[ \t\r\n]+")
+	def _(self, val):
+		pass
+GLexer = LexerJSON
 
 
 KV = NT("KV")
@@ -41,6 +36,7 @@ Element = NT("Element")
 Elements = NT("Elements")
 class ParserJSON(Parser):
 	START = JSON
+
 	@production("str", ":", Element, out=KV)
 	def _(k, _1, v):
 		return k, v
@@ -70,16 +66,33 @@ class ParserJSON(Parser):
 		return [e]+le
 	@production(JSON, out=Element)
 	def _(_1):
-			return _1
+		return _1
 	@production(List, out=Element)
 	def _(_1):
-			return _1
+		return _1
 	@production("str", out=Element)
 	def _(_1):
-			return _1
+		return _1
 	@production("num", out=Element)
 	def _(_1):
-			return _1
+		return _1
 	@production("bool", out=Element)
 	def _(_1):
-			return _1
+		return _1
+GParser = ParserJSON
+
+
+if __name__ == "__main__":
+	text = open("data.json", "r").read()
+	lexer = LexerJSON(text)
+	tokens, error = lexer.tokens()
+	if error:
+		print(error)
+	else:
+		t = time()
+		result, error = ParserJSON.parse(tokens, lexer)
+		if error:
+			print(error)
+		else:
+			print(result)
+		print(time()-t)

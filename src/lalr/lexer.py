@@ -90,8 +90,8 @@ class Lexer:
 			after, _, before = token[::-1].partition("\n")
 			self.pos_nl = self.pos - len(after)
 
-	def raise_error(self, msg, size=1):
-		raise Illegal_Token(msg, self.file_name, self.text, self, size)
+	def raise_error(self, msg, size=1, note=None):
+		raise Illegal_Token(msg, self.file_name, self.text, self, size, note)
 
 	def tokens(self):
 		stream = []

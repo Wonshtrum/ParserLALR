@@ -6,7 +6,7 @@ class Illegal_Token(Exception):
 		self.file_name = file_name
 		self.text = text
 		self.pos = pos
-		self.size = max(1, lexer.pos_end-lexer.pos) if size is None else size
+		self.size = max(1, pos.pos_end-pos.pos) if size is None else size
 		self.note = note
 
 	def format_error(self):
@@ -19,6 +19,6 @@ class Illegal_Token(Exception):
 {TAB}File "{self.file_name}", line {self.pos.line}
 {TAB}{self.msg}
 {TAB}{TAB}{line}
-{TAB}{TAB}{" "*padding}{"^"*self.size}"""+""if self.note is None else f"""
-{TAB}note: {self.note}"""
+{TAB}{TAB}{" "*padding}{"^"*self.size}"""+("" if self.note is None else f"""
+{TAB}note: {self.note}""")
 		return result[1:]
