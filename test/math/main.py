@@ -1,6 +1,5 @@
 from lalr.lexer import Lexer, token
-from lalr.parser import Parser, production
-from lalr.lrk import NT
+from lalr.parser import Parser, production, NT
 
 
 class LexerMath(Lexer):
@@ -55,12 +54,13 @@ if __name__ == "__main__":
 	text = "-(1-1)*1+1*(1-1-1*2-1)"
 	lexer = LexerMath(text)
 	tokens, error = lexer.tokens()
+	print(text)
 	if error:
 		print(error)
 	else:
+		print(tokens)
 		result, error = ParserMath.parse(tokens, lexer)
 		if error:
 			print(error)
 		else:
-			print(text)
 			print(result)

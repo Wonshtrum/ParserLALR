@@ -1,4 +1,4 @@
-from .lrk import Rules, unroll, parse
+from .lrk import Rules, NT, unroll, parse, group
 
 
 def production(*tokens, out="S"):
@@ -34,3 +34,15 @@ class Parser:
 	@classmethod
 	def parse(cls, tokens, lexer):
 		return parse(cls.ENTRIES, tokens, lexer)
+
+	@classmethod
+	def print(cls, level=0):
+		grouped = group(cls.ENTRIES)
+		for s in sorted(grouped.keys()):
+			if level == 0:
+				print(s, ":", tuple(grouped[s].keys()))
+			elif level == 1:
+				print(s, ":", {k:(v[0] if isinstance(v, tuple) else v) for k, v in grouped[s].items()})
+			else:
+				print(s, ":", grouped[s])
+		print(len(grouped.keys()))

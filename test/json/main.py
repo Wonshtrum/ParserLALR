@@ -1,6 +1,5 @@
 from lalr.lexer import Lexer, token
-from lalr.parser import Parser, production
-from lalr.lrk import NT
+from lalr.parser import Parser, production, NT
 from time import time
 
 

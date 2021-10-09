@@ -2,8 +2,10 @@ from .utils import Set, enum_list
 from .errors import Illegal_Token
 
 
-debug = print
-debug = lambda *args, **kwargs: None
+def debug(*args, **kwargs):
+	if debug.verbose:
+		print(*args, **kwargs)
+debug.verbose = False
 
 
 class NT:
@@ -309,12 +311,12 @@ def unroll(rules, start):
 				debug(list(reduce.keys()))
 		stack.pop()
 
-	state_list = list(states.values())
+	"""state_list = list(states.values())
 	for i, state in enumerate(state_list):
 		for other in state_list[i+1:]:
 			if state.can_merge(other):
 				debug("merging", state.id, other.id)
-				merge[state.id] = merge[other.id]
+				merge[state.id] = merge[other.id]"""
 
 	merge_goto = {}
 	active_states = set()
