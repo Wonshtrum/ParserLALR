@@ -162,7 +162,7 @@ class State(dict):
 			if isinstance(at, NT):
 				rule = rules[at]
 				if position.on_last():
-					next = rule.follow
+					next = position.look
 				elif isinstance(position.next(), NT):
 					next = rules[position.next()].first
 				else:
@@ -261,7 +261,7 @@ def group(goto):
 	return result
 
 
-def unroll(rules, start):
+def unroll(rules, start, minify=False):
 	accept = NT("__ACCEPT__")
 	rules.add_rule(accept, [start, EOF])
 	origin = State()
@@ -311,12 +311,15 @@ def unroll(rules, start):
 				debug(list(reduce.keys()))
 		stack.pop()
 
-	"""state_list = list(states.values())
-	for i, state in enumerate(state_list):
-		for other in state_list[i+1:]:
-			if state.can_merge(other):
-				debug("merging", state.id, other.id)
-				merge[state.id] = merge[other.id]"""
+	if minify:
+		state_list = list(states.values())
+		for i, state in enumerate(state_list):
+			for other in state_list[i+1:]:
+				if state.can_merge(other):
+					debug("merging", state.id, other.id)
+					merge[state.id] = other.id
+		for k, v in merge.items():
+			merge[k] = merge[v]
 
 	merge_goto = {}
 	active_states = set()
@@ -338,6 +341,15 @@ def unroll(rules, start):
 		if k in small:
 			small_states[small[k]] = v
 			v.id = small[k]
+		else:
+			debug("dismiss", k)
+
+	grouped = group(small_goto)	
+	l = len(grouped.keys())
+	for s in range(l):
+		for o in range(s+1, l):
+			if grouped[s] == grouped[o]:
+				print("uncaught merge", s, o)
 
 	return rules, small_goto, small_states
 
@@ -347,13 +359,14 @@ def parse(goto, tokens, lexer):
 	states = [0]
 	stack = []
 	tree = []
+	last_valid = 0
 	try:
 		while tokens:
 			token = tokens[0]
 			state = states[-1]
 			debug(states, tokens, stack)
 			if (token.type, state) not in goto:
-				raise Illegal_Token(f"Syntax error: unexpected token {token}", lexer.file_name, lexer.text, token, note=f"expected: {enum_list([_ for _ in grouped[state] if not isinstance(_, NT)])}")
+				raise Illegal_Token(f"Syntax error: unexpected token {token}", lexer.file_name, lexer.text, token, note=f"expected {enum_list([_ for _ in grouped[last_valid] if not isinstance(_, NT)])}")
 			result = goto[(token.type, state)]
 			debug(result, tree)
 			if result is ACCEPT:
@@ -361,6 +374,7 @@ def parse(goto, tokens, lexer):
 			elif isinstance(result, int):
 				# shift
 				states.append(result)
+				last_valid = result
 				tokens.pop(0)
 				stack.append(token.type)
 				tree.append(token.value)

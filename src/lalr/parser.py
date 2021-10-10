@@ -22,15 +22,16 @@ production.entries = []
 
 class Parser:
 	START = "S"
+	MINIFY = False
 	ENTRIES = None
 	@classmethod
 	def build(cls):
 		if cls.ENTRIES is None:
 			cls.ENTRIES = []
 		rules = Rules(*cls.ENTRIES)
-		rules, goto, states = unroll(rules, cls.START)
+		rules, goto, states = unroll(rules, cls.START, cls.MINIFY)
 		cls.ENTRIES = goto
-	
+
 	@classmethod
 	def parse(cls, tokens, lexer):
 		return parse(cls.ENTRIES, tokens, lexer)

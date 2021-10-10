@@ -55,9 +55,9 @@ class Node:
 			else:
 				result += str(arg)
 		return result
-	
+
 	def __repr__(self):
 		return self.format()
-	
+
 	def __str__(self):
 		return self.format()
