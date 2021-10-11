@@ -1,7 +1,9 @@
 from .lrk import Rules, NT, unroll, parse, group
 
 
-def production(*tokens, out="S"):
+def production(*tokens, out=None):
+	if out is None:
+		raise ValueError("Production value can't produce None")
 	class deco:
 		def __init__(self, method):
 			entry = (out, tokens, method)

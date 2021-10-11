@@ -7,7 +7,6 @@ class LexerMath(Lexer):
 	@token("([0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)")
 	def _(self, val):
 		return float(val), "num"
-GLexer = LexerMath
 
 
 Add = NT("Add")
@@ -47,7 +46,6 @@ class ParserMath(Parser):
 	@production(Term, out=Factor)
 	def _(_1):
 		return _1
-GParser = ParserMath
 
 
 if __name__ == "__main__":

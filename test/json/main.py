@@ -24,7 +24,6 @@ class LexerJSON(Lexer):
 	@token("[ \t\r\n]+")
 	def _(self, val):
 		pass
-GLexer = LexerJSON
 
 
 KV = NT("KV")
@@ -78,7 +77,6 @@ class ParserJSON(Parser):
 	@production("bool", out=Element)
 	def _(_1):
 		return _1
-GParser = ParserJSON
 
 
 if __name__ == "__main__":

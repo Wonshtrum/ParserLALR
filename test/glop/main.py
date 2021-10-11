@@ -47,6 +47,7 @@ Factor = NT("Factor")
 Term = NT("Term")
 class ParserGlop(Parser):
 	START = Instructions
+	#MINIFY = True
 
 	@production("function", "id", "(", Arguments, ")", Statement, out=Instruction)
 	def _(_1, name, _2, args, _3, body):
@@ -158,10 +159,6 @@ class ParserGlop(Parser):
 	@production(Term, out=Factor)
 	def _(_1):
 		return _1
-
-
-GLexer = LexerGlop
-GParser = ParserGlop
 
 
 if __name__ == "__main__":

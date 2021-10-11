@@ -61,3 +61,41 @@ class Node:
 
 	def __str__(self):
 		return self.format()
+
+
+def member_getter(obj):
+	if "__dict__" not in dir(obj.__class__):
+		return None
+	return [_ for _ in dir(obj)
+		if not callable(getattr(obj, _))
+		and not _.startswith("__")]
+
+
+def node_print(name, node, sub_getter, tab="", show_none=False):
+	dec = " "
+	result = str(name)
+	if hasattr(node, "__iter__") and not isinstance(node, str):
+		sub_nodes = range(len(node))
+		#node = list(iter(node))
+		get = lambda obj, attr: obj[attr]
+		if len(node) == 0:
+			sub_nodes = None
+	else:
+		get = lambda obj, attr: getattr(obj, attr)
+		sub_nodes = sub_getter(node)
+	if sub_nodes is None:
+		return f"{name}: {repr(node)}"
+	result = f"{name}: {node.__class__.__name__}"
+	for i, sub_node in enumerate(sub_nodes):
+		value = get(node, sub_node)
+		if value is None and not show_none:
+			continue
+		result += "\n"+tab
+		if i == len(sub_nodes)-1:
+			result += "└"
+			pad = " "
+		else:
+			result += "├"
+			pad = "│"
+		result += node_print(sub_node, value, sub_getter, tab+pad+dec, show_none)
+	return result
