@@ -26,6 +26,8 @@ DEFAULT_PRIORITY = 0
 def token(pattern, priority=DEFAULT_PRIORITY):
 	class deco:
 		def __init__(self, f):
+			if f.__code__.co_argcount != 2:
+				raise ValueError("Token decorator must take exactly 2 arguments")
 			def wrapper(lexer, val):
 				result = f(lexer, val)
 				if result is None:

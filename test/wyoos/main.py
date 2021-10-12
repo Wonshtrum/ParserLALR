@@ -3,7 +3,7 @@ from lalr.parser import Parser, production, NT
 from .ast import *
 
 
-class LexerWYOOP(Lexer):
+class LexerWYOOS(Lexer):
 	ENTRIES = [
 		"if", "else", "while", "print", "read",
 		"=", ";",
@@ -51,9 +51,15 @@ StatementC = NT("StatementC")
 Statements = NT("Statements")
 Statement = NT("Statement")
 Lvalue = NT("Lvalue")
-class ParserWYOOP(Parser):
+class ParserWYOOS(Parser):
 	START = Statements
 	#MINIFY = True
+
+	def __init__(self):
+		self.context = Context()
+
+	def get_execution_context(self):
+		return [self.context]
 
 	@production(Statement, out=Statements)
 	def _(statement):

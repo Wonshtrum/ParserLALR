@@ -3,9 +3,15 @@ from .lrk import Rules, NT, unroll, parse, group
 
 def production(*tokens, out=None):
 	if out is None:
-		raise ValueError("Production value can't produce None")
+		raise ValueError("Production rule can't produce None")
 	class deco:
 		def __init__(self, method):
+			argcount = method.__code__.co_argcount
+			if argcount == len(tokens):
+				old = method
+				method = lambda parser, *args: old(*args)
+			elif argcount != len(tokens)+1:
+				raise ValueError("Production rule must have the same number of arguments as left tokens")
 			entry = (out, tokens, method)
 			production.entries.append(entry)
 
@@ -35,10 +41,6 @@ class Parser:
 		cls.ENTRIES = goto
 
 	@classmethod
-	def parse(cls, tokens, lexer):
-		return parse(cls.ENTRIES, tokens, lexer)
-
-	@classmethod
 	def print(cls, level=0):
 		grouped = group(cls.ENTRIES)
 		for s in sorted(grouped.keys()):
@@ -49,3 +51,12 @@ class Parser:
 			else:
 				print(s, ":", grouped[s])
 		print(len(grouped.keys()))
+
+	def get_context(self):
+		return self
+
+	def get_execution_context(self):
+		return []
+
+	def parse(self, tokens, lexer):
+		return parse(self.ENTRIES, tokens, lexer, self.get_context())

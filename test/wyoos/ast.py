@@ -1,5 +1,4 @@
 from lalr.utils import member_getter, node_print
-import inspect
 
 
 class Context:
@@ -18,9 +17,7 @@ class StatementBlock(Statement):
 	def add(self, statement):
 		self.statements.append(statement)
 		return self
-	def execute(self, context=None):
-		if context is None:
-			context = Context()
+	def execute(self, context):
 		for statement in self.statements:
 			statement.execute(context)
 	def __repr__(self):
@@ -85,6 +82,8 @@ class LocationValueVariable:
 	def set(self, value, context):
 		context.values[self.name] = value
 	def evaluate(self, context):
+		if self.name not in context.values:
+			raise NameError(f'NameError: Undefined identifier "{self.name}"')
 		return context.values[self.name]
 
 

@@ -57,6 +57,8 @@ class Rules(dict):
 		for rule in self.values():
 			for entry in rule.entries:
 				tokens = entry.tokens
+				if len(tokens) == 0:
+					continue
 				end = tokens[-1]
 				if isinstance(end, NT):
 					dirty = self[end].follow.update(rule.follow) or dirty
@@ -73,6 +75,8 @@ class Rules(dict):
 		dirty = False
 		for rule in self.values():
 			for entry in rule.entries:
+				if len(entry.tokens) == 0:
+					continue
 				first = entry.tokens[0]
 				if isinstance(first, NT):
 					dirty = rule.first.update(self[first].first) or dirty
@@ -162,7 +166,14 @@ class State(dict):
 			if isinstance(at, NT):
 				rule = rules[at]
 				if position.on_last():
-					next = position.look
+					#next = position.look
+					next = rule.follow
+					#next = rules[position.product].follow
+					#print(position)
+					#print(" ", position.look)
+					#print(at, rule.follow)
+					#print(position.product, rules[position.product].follow)
+					#print("---")
 				elif isinstance(position.next(), NT):
 					next = rules[position.next()].first
 				else:
@@ -354,12 +365,13 @@ def unroll(rules, start, minify=False):
 	return rules, small_goto, small_states
 
 
-def parse(goto, tokens, lexer):
+def parse(goto, tokens, lexer, ctx):
 	grouped = group(goto)
 	states = [0]
 	stack = []
 	tree = []
 	last_valid = 0
+	last_token = None
 	try:
 		while tokens:
 			token = tokens[0]
@@ -385,9 +397,13 @@ def parse(goto, tokens, lexer):
 				tree = tree[:-length]
 				stack = stack[:-length]
 				states = states[:-length]
-				tree.append(method(*args))
+				try:
+					tree.append(method(ctx, *args))
+				except Exception as error:
+					raise Illegal_Token(str(error), lexer.file_name, lexer.text, last_token)
 				stack.append(product)
 				states.append(goto[(product, states[-1])])
+			last_token = token
 	except Illegal_Token as error:
 		return None, error.format_error()
 	return None, None
