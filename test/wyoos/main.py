@@ -109,7 +109,7 @@ class ParserWYOOS(Parser):
 	@production("while", "(", BooleanExpression, ")", StatementI, out=StatementI)
 	def _(_1, _2, condition, _3, body):
 		return StatementWhile(condition, body)
-	
+
 	@production(BooleanExpressionO, out=BooleanExpression)
 	def _(e):
 		return e
@@ -147,7 +147,7 @@ class ParserWYOOS(Parser):
 	@production(ArithmeticExpressionA, out=ArithmeticExpression)
 	def _(e):
 		return e
-	
+
 	@production(ArithmeticExpressionA, "+", ArithmeticExpressionM, out=ArithmeticExpressionA)
 	def _(l, _1, r):
 		return ArithmeticExpressionPlus(l, r)
@@ -183,7 +183,7 @@ class ParserWYOOS(Parser):
 	@production("-", ArithmeticExpressionX, out=ArithmeticExpressionX)
 	def _(_1, e, _2):
 		return ArithmeticExpressionNeg(e)
-	
+
 	@production(ArithmeticExpression, "==", ArithmeticExpression, out=RelationalExpression)
 	def _(right, _1, left):
 		return RelationalExpressionEq(right, left)
@@ -202,7 +202,7 @@ class ParserWYOOS(Parser):
 	@production(ArithmeticExpression, ">=", ArithmeticExpression, out=RelationalExpression)
 	def _(l, _1, r):
 		return RelationalExpressionGE(l, r)
-	
+
 	@production("id", out=Lvalue)
 	def _(name):
 		return LocationValueVariable(name)

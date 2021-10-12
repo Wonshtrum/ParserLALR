@@ -78,9 +78,9 @@ class ParserBisqwit(Parser):
 
 	@production("func", "id", out=FunctionStart)
 	def _(ctx, _1, name):
-		fun = ctx.defun(name)
+		ctx.defun(name)
 		ctx.push()
-		return fun
+		return ctx.fun
 	@production(FunctionStart, "(", NameList, ")", Statement, out=Function)
 	def _(ctx, _1, _2, arguments, _3, body):
 		fun = ctx.add_function(body)
@@ -176,12 +176,13 @@ class ParserBisqwit(Parser):
 
 	@production(Expression2, "-=", Expression1, out=Expression1)
 	def _(ctx, l, _1, r):
-		left = 0
+		r = e_neg(r)
 		if not l.is_pure():
 			tmp = ctx.temp()
 			left = tmp.assign(e_addrof(l))
 			l = e_deref(tmp)
-		return e_comma(left, l.assign(e_add(l, e_neg(r))))
+			return e_comma(left, l.assign(e_add(l, r)))
+		return l.assign(e_add(l, r))
 	"""@production(Expression2, "*=", Expression1, out=Expression1)
 	def _(l, _1, r):
 		return
@@ -201,7 +202,6 @@ class ParserBisqwit(Parser):
 	@production(Expression3, out=Expression2)
 	def _(e):
 		return e
-
 
 	@production(Expression3, "&&", Expression4, out=Expression3)
 	def _(l, _1, r):
@@ -267,10 +267,44 @@ class ParserBisqwit(Parser):
 	@production("-", Expression7, out=Expression7)
 	def _(_1, e):
 		return e_neg(e)
+	@production("++", Expression7, out=Expression7)
+	def _(ctx, _1, e):
+		if not e.is_pure():
+			tmp = ctx.temp()
+			left = tmp.assign(e_addrof(e))
+			e = e_deref(tmp)
+			return e_comma(left, e.assign(e_add(e, 1)))
+		return e.assign(e_add(e, 1))
+	@production("--", Expression7, out=Expression7)
+	def _(ctx, _1, e):
+		if not e.is_pure():
+			tmp = ctx.temp()
+			left = tmp.assign(e_addrof(e))
+			e = e_deref(tmp)
+			return e_comma(left, e.assign(e_add(e, -1)))
+		return e.assign(e_add(e, -1))
 	@production(Expression8, out=Expression7)
 	def _(e):
 		return e
 
+	@production(Expression8, "++", out=Expression8)
+	def _(ctx, e, _1):
+		left = e_nop()
+		if not e.is_pure():
+			tmp1 = ctx.temp()
+			left = tmp1.assign(e_addrof(e))
+			e = e_deref(tmp1)
+		tmp2 = ctx.temp()
+		return e_comma(left, tmp2.assign(e), e.assign(e_add(e, 1)), tmp2)
+	@production(Expression8, "--", out=Expression8)
+	def _(ctx, e, _1):
+		left = e_nop()
+		if not e.is_pure():
+			tmp1 = ctx.temp()
+			left = tmp1.assign(e_addrof(e))
+			e = e_deref(tmp1)
+		tmp2 = ctx.temp()
+		return e_comma(left, tmp2.assign(e), e.assign(e_add(e, -1)), tmp2)
 	@production("(", FullExpression, ")", out=Expression8)
 	def _(_1, e, _2):
 		return e

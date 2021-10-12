@@ -83,7 +83,7 @@ class LocationValueVariable:
 		context.values[self.name] = value
 	def evaluate(self, context):
 		if self.name not in context.values:
-			raise NameError(f'NameError: Undefined identifier "{self.name}"')
+			raise ParserError(f'NameError: Undefined identifier "{self.name}"')
 		return context.values[self.name]
 
 

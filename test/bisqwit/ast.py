@@ -1,4 +1,5 @@
 from lalr.utils import member_getter, node_print
+from lalr.errors import ParserError
 
 
 class Beautiful:
@@ -21,7 +22,7 @@ class Context(Beautiful):
 
 	def define(self, name, ident):
 		if name in self.scopes[-1]:
-			raise NameError(f'NameError: Duplicate definition of "{name}"')
+			raise ParserError(f'NameError: Duplicate definition of "{name}"')
 		self.scopes[-1][name] = ident
 		return ident
 
@@ -29,16 +30,15 @@ class Context(Beautiful):
 		for scope in reversed(self.scopes):
 			if name in scope:
 				return Expression(scope[name])
-		raise NameError(f'NameError: Undefined identifier "{name}"')
+		raise ParserError(f'NameError: Undefined identifier "{name}"')
 
 	def defvar(self, name):
 		self.fun.num_vars += 1
 		return expr(self.define(name, id_variable(name, self.fun.num_vars-1)))
 
 	def defun(self, name):
-		self.fun = Function(name, e_comma())
-		self.define(name, id_function(name, len(self.func_list)))
-		return self.fun
+		self.fun.name = name
+		return expr(self.define(name, id_function(name, len(self.func_list))))
 
 	def defparam(self, name):
 		self.fun.num_params += 1
@@ -50,7 +50,7 @@ class Context(Beautiful):
 
 	def add_function(self, code):
 		fun = self.fun
-		fun.code.add(*code.params, e_ret(0))
+		fun.code = e_comma(*code.params, e_ret(0))
 		self.func_list.append(fun)
 		self.fun = Function.default()
 		return fun
@@ -165,9 +165,9 @@ class Function(Beautiful):
 
 
 class Program(Beautiful):
-	def __init__(self, *functions):
-		self.functions = list(functions)
+	def __init__(self, *instructions):
+		self.instructions = list(instructions)
 
-	def add(self, function):
-		self.functions.append(function)
+	def add(self, instruction):
+		self.instructions.append(instruction)
 		return self

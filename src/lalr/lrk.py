@@ -1,5 +1,5 @@
 from .utils import Set, enum_list
-from .errors import Illegal_Token
+from .errors import Illegal_Token, ParserError
 
 
 def debug(*args, **kwargs):
@@ -399,7 +399,7 @@ def parse(goto, tokens, lexer, ctx):
 				states = states[:-length]
 				try:
 					tree.append(method(ctx, *args))
-				except Exception as error:
+				except ParserError as error:
 					raise Illegal_Token(str(error), lexer.file_name, lexer.text, last_token)
 				stack.append(product)
 				states.append(goto[(product, states[-1])])

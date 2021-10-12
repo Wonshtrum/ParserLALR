@@ -22,3 +22,7 @@ class Illegal_Token(Exception):
 {TAB}{TAB}{" "*padding}{"^"*self.size}"""+("" if self.note is None else f"""
 {TAB}note: {self.note}""")
 		return result[1:]
+
+
+class ParserError(Exception):
+	pass
