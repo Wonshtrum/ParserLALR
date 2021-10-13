@@ -1,5 +1,34 @@
-from lalr.utils import member_getter, node_print
+from lalr.utils import node_print, member_getter as default_getter
 from lalr.errors import ParserError
+
+
+def member_getter(node):
+	if isinstance(node, Context):
+		return None, [("tempcounter", node.tempcounter), ("fun", node.fun.name), ("func_list", [_.name for _ in node.func_list]), ("scopes", node.scopes)]
+	elif isinstance(node, Program):
+		return None, [(None, _) for _ in node.instructions]
+	elif isinstance(node, Function):
+		return f"Function: {node.name}", [(None, node.code)]
+	elif isinstance(node, Identifier):
+		return f"IDENT {node.type[0].upper()}{node.index}: {node.name}", None
+	elif not isinstance(node, Expression):
+		return default_getter(node)
+	elif node.type is Expression.NOP:
+		return "NOP", None
+	elif node.type is Expression.STRING:
+		return f"STRING: {node.string}", None
+	elif node.type is Expression.NUMBER:
+		return f"NUMBER: {node.number}", None
+	elif node.type is Expression.IDENT:
+		return member_getter(node.ident)
+	elif node.type is Expression.LOOP:
+		return "LOOP", [("cond", node.params[0]), ("body", node.params[1])]
+	elif node.type is Expression.FCALL:
+		return f"CALL({node.params[0]})", [(None, _) for _ in node.params[1:]]
+	elif node.type is Expression.COPY:
+		return "COPY", [("from", node.params[0]), ("to", node.params[1])]
+	else:
+		return node.type.upper(), [(None, _) for _ in node.params]
 
 
 class Beautiful:
@@ -29,7 +58,7 @@ class Context(Beautiful):
 	def use(self, name):
 		for scope in reversed(self.scopes):
 			if name in scope:
-				return Expression(scope[name])
+				return expr(scope[name])
 		raise ParserError(f'NameError: Undefined identifier "{name}"')
 
 	def defvar(self, name):
@@ -50,7 +79,7 @@ class Context(Beautiful):
 
 	def add_function(self, code):
 		fun = self.fun
-		fun.code = e_comma(*code.params, e_ret(0))
+		fun.code = e_comma(code, e_ret(0))
 		self.func_list.append(fun)
 		self.fun = Function.default()
 		return fun
@@ -68,7 +97,7 @@ class Identifier(Beautiful):
 	FUNCTION = "function"
 	VARIABLE = "variable"
 	ENUM = (UNDEFINED, PARAMETER, FUNCTION, VARIABLE)
-	def __init__(self, type, name, index=None):
+	def __init__(self, type, name, index=0):
 		self.type = type
 		self.name = name
 		self.index = index
@@ -161,7 +190,7 @@ class Function(Beautiful):
 		self.num_params = num_params
 
 	def default():
-		return Function("<master>", e_nop())
+		return Function("<empty>", e_nop())
 
 
 class Program(Beautiful):

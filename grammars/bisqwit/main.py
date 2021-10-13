@@ -319,7 +319,7 @@ class ParserBisqwit(Parser):
 		return e_fcall(name)
 	@production(Expression8, "(", CommaExpression, ")", out=Expression8)
 	def _(name, _1, args, _2):
-		return e_fcall(id_function(name)).add(*args.params)
+		return e_fcall(name, *args.params)
 	@production("id", out=Expression8)
 	def _(ctx, name):
 		return ctx.use(name)

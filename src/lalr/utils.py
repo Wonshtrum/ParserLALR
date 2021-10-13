@@ -63,36 +63,35 @@ class Node:
 		return self.format()
 
 
-def member_getter(obj):
-	if "__dict__" not in dir(obj.__class__):
-		return []
-	return [_ for _ in dir(obj)
-		if not callable(getattr(obj, _))
-		and not _.startswith("__")
-		and _ not in dir(obj.__class__)]
+def member_getter(node):
+	if isinstance(node, dict):
+		return None, [(k, v) for k, v in node.items()]
+	elif hasattr(node, "__iter__") and not isinstance(node, str):
+		return None, [(k, v) for k, v in enumerate(node)]
+	elif "__dict__" not in dir(node.__class__):
+		return None, None
+	else:
+		return None, [(k, getattr(node, k)) for k in dir(node)
+		if not callable(getattr(node, k))
+		and not k.startswith("__")
+		and k not in dir(node.__class__)]
 
 
 def node_print(name, node, sub_getter, tab="", show_none=False):
 	dec = " "
 	result = f"{name}: " if name is not None else ""
-	if isinstance(node, dict):
-		sub_nodes = node.keys()
-		get = lambda obj, attr: obj[attr]
-	elif hasattr(node, "__iter__") and not isinstance(node, str):
-		sub_nodes = range(len(node))
-		get = lambda obj, attr: obj[attr]
-	else:
-		sub_nodes = sub_getter(node)
-		get = lambda obj, attr: getattr(obj, attr)
-	if len(sub_nodes) == 0:
-		return f"{result}{repr(node)}"
-	result = f"{result}{node.__class__.__name__}"
-	for i, sub_node in enumerate(sub_nodes):
-		value = get(node, sub_node)
+	node_repr, sub_nodes = sub_getter(node)
+	length = 0 if sub_nodes is None else len(sub_nodes)
+	if length == 0:
+		node_repr = repr(node) if node_repr is None else node_repr
+		return f"{result}{node_repr}"
+	node_repr = node.__class__.__name__ if node_repr is None else node_repr
+	result = f"{result}{node_repr}"
+	for i, (sub_node, value) in enumerate(sub_nodes):
 		if value is None and not show_none:
 			continue
 		result += "\n"+tab
-		if i == len(sub_nodes)-1:
+		if i == length-1:
 			result += "└"
 			pad = " "
 		else:

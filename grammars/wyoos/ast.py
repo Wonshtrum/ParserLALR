@@ -21,7 +21,7 @@ class StatementBlock(Statement):
 		for statement in self.statements:
 			statement.execute(context)
 	def __repr__(self):
-		return node_print("prog", self, member_getter)
+		return node_print(None, self, member_getter)
 
 
 class StatementWrite(Statement):

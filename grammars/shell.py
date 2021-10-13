@@ -2,11 +2,17 @@ from sys import argv
 from importlib.machinery import SourceFileLoader
 
 
+lexer = None
+parser = None
+result = None
+
+
 def hasmethod(obj, method):
 	return hasattr(obj, method) and callable(getattr(obj, method))
 
 
 def compile(text, Lexer, parser, verbose=False):
+	global lexer
 	lexer = Lexer(text)
 	tokens, error = lexer.tokens()
 	if error:
@@ -23,9 +29,11 @@ def compile(text, Lexer, parser, verbose=False):
 			result.execute(*parser.get_execution_context())
 		except Exception as error:
 			print(error)
+	return result
 
 
 def main(path, files, verbose=False):
+	global parser, result
 	if not path.endswith("/"):
 		path += "/"
 	grammar = SourceFileLoader("grammar", path+"__init__.py").load_module()
@@ -44,7 +52,8 @@ def main(path, files, verbose=False):
 				parser = grammar.GParser()
 				text = ""
 			continue
-		compile(text, grammar.GLexer, parser, verbose)
+		result = compile(text, grammar.GLexer, parser, verbose)
+		parser = parser
 		text = ""
 		print("")
 
