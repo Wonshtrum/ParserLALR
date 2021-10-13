@@ -28,6 +28,9 @@ class LexerBisqwit(Lexer):
 	@token("[ \t\r\n]+")
 	def _(self, val):
 		pass
+	@token("//.*?(\n|$)", priority=1)
+	def _(self, val):
+		pass
 	@token("/\*.*?\*/", priority=1)
 	def _(self, val):
 		pass
@@ -311,10 +314,10 @@ class ParserBisqwit(Parser):
 	@production(Expression8, "[", FullExpression, "]", out=Expression8)
 	def _(p, _1, i, _2):
 		return e_deref(e_add(p, i))
-	@production("id", "(", ")", out=Expression8)
+	@production(Expression8, "(", ")", out=Expression8)
 	def _(name, _1, _2):
 		return e_fcall(name)
-	@production("id", "(", CommaExpression, ")", out=Expression8)
+	@production(Expression8, "(", CommaExpression, ")", out=Expression8)
 	def _(name, _1, args, _2):
 		return e_fcall(id_function(name)).add(*args.params)
 	@production("id", out=Expression8)

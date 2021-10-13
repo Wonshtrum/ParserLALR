@@ -378,7 +378,8 @@ def parse(goto, tokens, lexer, ctx):
 			state = states[-1]
 			debug(states, tokens, stack)
 			if (token.type, state) not in goto:
-				raise Illegal_Token(f"Syntax error: unexpected token {token}", lexer.file_name, lexer.text, token, note=f"expected {enum_list([_ for _ in grouped[last_valid] if not isinstance(_, NT)])}")
+				expected = [_ for _ in grouped[last_valid] if not isinstance(_, NT)]
+				raise Illegal_Token(f"Syntax error: unexpected token {token}", lexer.file_name, lexer.text, token, note=f"expected {enum_list(expected)}")
 			result = goto[(token.type, state)]
 			debug(result, tree)
 			if result is ACCEPT:

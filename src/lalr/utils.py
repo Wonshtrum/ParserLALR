@@ -63,7 +63,7 @@ class Node:
 		return self.format()
 
 
-def member_getter(obj, is_class=False):
+def member_getter(obj):
 	if "__dict__" not in dir(obj.__class__):
 		return []
 	return [_ for _ in dir(obj)
