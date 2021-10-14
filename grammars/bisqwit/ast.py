@@ -1,5 +1,6 @@
 from lalr.utils import node_print, member_getter as default_getter
 from lalr.errors import ParserError
+from types import GeneratorType as generator
 
 
 def member_getter(node):
@@ -21,8 +22,6 @@ def member_getter(node):
 		return f"NUMBER: {node.number}", None
 	elif node.type is Expression.IDENT:
 		return member_getter(node.ident)
-	elif node.type is Expression.LOOP:
-		return "LOOP", [("cond", node.params[0]), ("body", node.params[1])]
 	elif node.type is Expression.FCALL:
 		return f"CALL({node.params[0]})", [(None, _) for _ in node.params[1:]]
 	elif node.type is Expression.COPY:
@@ -36,10 +35,10 @@ class Beautiful:
 		return node_print(None, self, member_getter)
 
 
-def create_sub_constructor(constructor, n):
-	def sub_constructor(*params):
-		return constructor(n, *params)
-	return sub_constructor
+def pre_param(f, *args):
+	def wrapper(*params):
+		return f(*args, *params)
+	return wrapper
 
 
 class Context(Beautiful):
@@ -104,7 +103,8 @@ class Identifier(Beautiful):
 
 
 for n in Identifier.ENUM:
-	locals()[f"id_{n}"] = create_sub_constructor(Identifier, n)
+	locals()[f"id_{n}"] = pre_param(Identifier, n)
+	locals()[f"is_{n}"] = pre_param(lambda n, e: e.type is n, n)
 
 
 class Expression(Beautiful):
@@ -130,7 +130,7 @@ class Expression(Beautiful):
 		self.ident = ident
 		self.string = string
 		self.number = number
-		self.params = None if params is None else [Expression.constructor(param) for param in params]
+		self.params = [] if params is None else [Expression.constructor(param) for param in params]
 
 	def constructor(arg=None):
 		if arg is None:
@@ -147,6 +147,11 @@ class Expression(Beautiful):
 			raise ValueError(f"Can't construct expression with {arg}")
 
 	def sub_constructor(n, *params):
+		if len(params) == 1:
+			if isinstance(params[0], list):
+				return Expression(n, params=params[0])
+			elif isinstance(params[0], generator):
+				return Expression(n, params=list(params[0]))
 		return Expression(n, params=list(params))
 
 	def assign(self, other):
@@ -157,11 +162,19 @@ class Expression(Beautiful):
 			self.params.append(Expression.constructor(other))
 		return self
 
+	def set(self, arg):
+		new = Expression.constructor(arg)
+		self.type = new.type
+		self.ident = new.ident
+		self.string = new.string
+		self.number = new.number
+		self.params = new.params
+
 	def copy(self):
-		return Expression(self.type, self.ident, self.number, self.params)
+		return Expression(self.type, self.ident, self.string, self.number, [_.copy() for _ in self.params])
 
 	def is_pure(self):
-		if self.params is None:
+		if not self.params:
 			return True
 		if self.type is Expression.FCALL:
 			return False
@@ -176,10 +189,16 @@ class Expression(Beautiful):
 				return False
 		return True
 
+	def __eq__(self, other):
+		return self.type == other.type and self.ident == other.ident and self.string == other.string and self.number == other.number and self.params == other.params
+
 
 for n in Expression.ENUM:
-	locals()[f"e_{n}"] = create_sub_constructor(Expression.sub_constructor, n)
+	locals()[f"e_{n}"]  = pre_param(Expression.sub_constructor, n)
+	locals()[f"is_{n}"] = pre_param(lambda n, e: e.type is n, n)
 expr = Expression.constructor
+is_true  = lambda e: is_number(e) and e.number != 0
+is_false = lambda e: is_number(e) and e.number == 0
 
 
 class Function(Beautiful):
@@ -188,6 +207,8 @@ class Function(Beautiful):
 		self.code = code
 		self.num_vars = num_vars
 		self.num_params = num_params
+		self.pure = False
+		self.pure_known = False
 
 	def default():
 		return Function("<empty>", e_nop())

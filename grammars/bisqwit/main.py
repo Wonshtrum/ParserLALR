@@ -111,7 +111,7 @@ class ParserBisqwit(Parser):
 	@production("{", out=Statements)
 	def _(ctx, _1):
 		ctx.push()
-		return e_comma()
+		return e_comma(e_nop())
 	@production(Statements, Statement, out=Statements)
 	def _(statements, statement):
 		return statements.add(statement)
@@ -329,3 +329,9 @@ class ParserBisqwit(Parser):
 	@production("num", out=Expression8)
 	def _(number):
 		return expr(number)
+	@production("true", out=Expression8)
+	def _(number):
+		return expr(1)
+	@production("false", out=Expression8)
+	def _(number):
+		return expr(0)

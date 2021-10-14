@@ -32,8 +32,8 @@ def compile(text, Lexer, parser, verbose=False):
 	return result
 
 
-def main(path, files, verbose=False):
-	global parser, result
+def main(path, files, verbose=False, immediate=False):
+	global parser, result, grammar
 	if not path.endswith("/"):
 		path += "/"
 	grammar = SourceFileLoader("grammar", path+"__init__.py").load_module()
@@ -42,7 +42,9 @@ def main(path, files, verbose=False):
 		text = open(unit, "r").read()
 		print(text)
 		parser = grammar.GParser()
-		compile(text, grammar.GLexer, parser, verbose)
+		result = compile(text, grammar.GLexer, parser, verbose)
+	if immediate:
+		return grammar
 	text = ""
 	while True:
 		entry = input("> ")
@@ -51,6 +53,8 @@ def main(path, files, verbose=False):
 			if entry == "CLEAR":
 				parser = grammar.GParser()
 				text = ""
+			elif entry == "QUIT":
+				return grammar
 			continue
 		result = compile(text, grammar.GLexer, parser, verbose)
 		parser = parser
@@ -63,6 +67,9 @@ if __name__ == "__main__":
 		if argv[1][0] == "-":
 			if len(argv) > 2:
 				verbose = "v" in argv[1]
-				main(argv[2], argv[3:], verbose)
+				immediate = "i" in argv[1]
+				grammar = main(argv[2], argv[3:], verbose, immediate)
 		else:
-			main(argv[1], argv[2:])
+			grammar = main(argv[1], argv[2:])
+		if grammar is not None:
+			from grammar import *
