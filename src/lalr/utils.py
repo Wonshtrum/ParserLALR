@@ -77,16 +77,22 @@ def member_getter(node):
 		and k not in dir(node.__class__)]
 
 
-def node_print(name, node, sub_getter, tab="", show_none=False):
+def node_print(name, node, sub_getter, tab="", show_none=False, visited=None):
 	dec = " "
-	result = f"{name}: " if name is not None else ""
 	node_repr, sub_nodes = sub_getter(node)
 	length = 0 if sub_nodes is None else len(sub_nodes)
+	node_repr = node.__class__.__name__ if node_repr is None else node_repr
+	if visited is None:
+		visited = []
+	if any(node is _ for _ in visited):
+		node_repr = f"(dup) {node_repr}"
+	else:
+		visited.append(node)
+	result = "" if name is None else f"{name}: "
+	result = f"{result}{node_repr}"
 	if length == 0:
 		node_repr = repr(node) if node_repr is None else node_repr
-		return f"{result}{node_repr}"
-	node_repr = node.__class__.__name__ if node_repr is None else node_repr
-	result = f"{result}{node_repr}"
+		return result
 	for i, (sub_node, value) in enumerate(sub_nodes):
 		if value is None and not show_none:
 			continue
@@ -97,5 +103,5 @@ def node_print(name, node, sub_getter, tab="", show_none=False):
 		else:
 			result += "├"
 			pad = "│"
-		result += node_print(sub_node, value, sub_getter, tab+pad+dec, show_none)
+		result += node_print(sub_node, value, sub_getter, tab+pad+dec, show_none, visited)
 	return result

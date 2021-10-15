@@ -70,7 +70,7 @@ class Lexer:
 		if isinstance(pattern, str):
 			pattern = re.compile(re.escape(pattern))
 			type = wrapper
-			wrapper = lambda lexer, x: Token(x, type, lexer) 
+			wrapper = lambda lexer, x: Token(x, type, lexer)
 		return pattern, wrapper, priority
 
 	def __init__(self, text, file_name="<stdin>"):

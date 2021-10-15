@@ -70,12 +70,57 @@ def adopt(e, is_child, get_children):
 			i += 1
 
 
-s=lambda e:(for_all_expr(simplify, e, None) and False) or print(e)
-def simplify(e, context):
+c=Context()
+s=lambda e:(for_all_expr(simplify, e, c, c.fun) and False) or print(e)
+def simplify(e, context, f):
+	# (1,2,(3,4)) -> (1,2,3,4)
 	if is_add(e) or is_comma(e) or is_cor(e) or is_cand(e):
 		adopt(e,
 			lambda sub, i: sub.type is e.type,
 			lambda sub, i: sub.params)
+
+	# x+3+(y=4) -> x+3+(y=4,4)
+	# x+3+(y=f()) -> x+3+(temp=f(),y=temp,temp)
+	if not is_comma(e) and not is_addrof(e):
+		params = e.params
+		if is_loop(e):
+			params = params[:1]
+		for param in params:
+			if is_copy(param):
+				rhs, lhs = param.params
+				if rhs.is_pure():
+					param.set(e_comma(param.copy(), rhs))
+				else:
+					tmp = f.temp()
+					param.set(e_comma(tmp.assign(rhs), e_copy(tmp, lhs), tmp))
+
+	# x=(a,1)+(b,2)+3 -> (a,b,x=1+2+3)
+	if any(map(is_comma, e.params)):
+		params = e.params
+		if is_cand(e) or is_cor(e) or is_loop(e):
+			params = e.params[:1]
+		for i, param in reversed(list(enumerate(params))):
+			if is_comma(param):
+				break
+		comma_params = []
+		for j, param in enumerate(params[:i+1]):
+			if is_comma(param):
+				comma_params.extend(param.params[:-1])
+				param.set(param.params[-1])
+				const = param.get_const()
+				if j < i and not (is_number(param) or is_string(param)):
+					const = param.get_const()
+					if const is None:
+						tmp = f.temp()
+						comma_params.append(tmp.assign(param.copy()))
+						param.set(tmp)
+					else:
+						comma_params.append(param.copy())
+						param.set(const)
+		if comma_params:
+			comma_params.append(e.copy())
+			e.set(e_comma(comma_params))
+
 	if is_add(e):
 		acc = sum(_.number for _ in e.params if is_number(_))
 		e.params = [_ for _ in e.params if not is_number(_)]
@@ -164,6 +209,12 @@ def simplify(e, context):
 					if is_ret(param) or (is_loop(param) and is_true(param.params[0])):
 						params = params[:i+1]
 				i += 1
+		# (a=1,a) -> (a=1)
+		if len(params) > 1:
+			a = params[-1]
+			b = params[-2]
+			if is_ident(a) and is_copy(b) and is_ident(b.params[1]) and a.ident == b.params[1].ident:
+				params = params[:-1]
 		e.params = params
 
 	length = len(e.params)

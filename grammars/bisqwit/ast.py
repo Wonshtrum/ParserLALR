@@ -189,8 +189,20 @@ class Expression(Beautiful):
 				return False
 		return True
 
+	def get_const(self):
+		if self.type is Expression.NUMBER:
+			return self
+		elif self.type is Expression.STRING:
+			return self
+		elif self.type is Expression.COPY:
+			return self.params[0].get_const()
+		elif self.type is Expression.COMMA:
+			return self.params[-1].get_const()
+		else:
+			return None
+
 	def __eq__(self, other):
-		return self.type == other.type and self.ident == other.ident and self.string == other.string and self.number == other.number and self.params == other.params
+		return self.type is other.type and self.ident is other.ident and self.string == other.string and self.number == other.number and self.params == other.params
 
 
 for n in Expression.ENUM:
@@ -209,6 +221,10 @@ class Function(Beautiful):
 		self.num_params = num_params
 		self.pure = False
 		self.pure_known = False
+
+	def temp(self):
+		self.num_vars += 1
+		return expr(id_variable(f"$C{self.num_vars-1}", self.num_vars-1))
 
 	def default():
 		return Function("<empty>", e_nop())

@@ -111,7 +111,7 @@ class Rule:
 		self.follow = Set() if follow is None else Set(follow)
 		self.first = Set()
 
-	def __repr__(self): 
+	def __repr__(self):
 		return f"{self.product} -> "+f"\n{' '*len(self.product)}  > ".join(
 			" ".join(str(token)
 			for token in entry.tokens)
@@ -355,7 +355,7 @@ def unroll(rules, start, minify=False):
 		else:
 			debug("dismiss", k)
 
-	grouped = group(small_goto)	
+	grouped = group(small_goto)
 	l = len(grouped.keys())
 	for s in range(l):
 		for o in range(s+1, l):
