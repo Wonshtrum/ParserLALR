@@ -71,8 +71,8 @@ def adopt(e, is_child, get_children):
 
 
 c=Context()
-s=lambda e:(for_all_expr(simplify, e, c, c.fun) and False) or print(e)
-def simplify(e, context, f):
+s=lambda e:(for_all_expr(simplify, e, c.fun, c) and False) or print(e)
+def simplify(e, f, context):
 	# (1,2,(3,4)) -> (1,2,3,4)
 	if is_add(e) or is_comma(e) or is_cor(e) or is_cand(e):
 		adopt(e,
@@ -118,6 +118,9 @@ def simplify(e, context, f):
 						comma_params.append(param.copy())
 						param.set(const)
 		if comma_params:
+			if is_loop(e):
+				for param in comma_params:
+					e.add(param)
 			comma_params.append(e.copy())
 			e.set(e_comma(comma_params))
 
@@ -231,6 +234,11 @@ def simplify(e, context, f):
 
 
 def optimise(context):
-	check_purity(context)
-	for f in context.func_list:
-		for_all_expr(simplify, f.code, context)
+	last = None
+	new = [f.code.copy() for f in context.func_list]
+	while new != last:
+		last = new
+		check_purity(context)
+		for f in context.func_list:
+			for_all_expr(simplify, f.code, f, context)
+		new = [f.code.copy() for f in context.func_list]

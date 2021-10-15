@@ -3,6 +3,42 @@ from lalr.errors import ParserError
 from types import GeneratorType as generator
 
 
+def decompile(e):
+	over = lambda params, symbol: symbol.join(decompile(_) for _ in params)
+	if e.type is Expression.NOP:
+		return "..."
+	if e.type is Expression.STRING:
+		return f'"{e.string}"';
+	if e.type is Expression.NUMBER:
+		return f"{e.number}"
+	if e.type is Expression.IDENT:
+		return e.ident.name
+	if e.type is Expression.ADD:
+		return over(e.params, "+")
+	if e.type is Expression.NEG:
+		return f"-({decompile(e.params[0])})"
+	if e.type is Expression.EQ:
+		return over(e.params, "==")
+	if e.type is Expression.COR:
+		return over(e.params, " || ")
+	if e.type is Expression.CAND:
+		return over(e.params, " && ")
+	if e.type is Expression.LOOP:
+		return f"while({decompile(e.params[0])}){{{over(e.params[1:],';')};}}"
+	if e.type is Expression.ADDROF:
+		return f"*({decompile(e.params[0])})"
+	if e.type is Expression.DEREF:
+		return f"&({decompile(e.params[0])})"
+	if e.type is Expression.FCALL:
+		return f"{decompile(e.params[0])}({over(e.params[1:],',')})"
+	if e.type is Expression.COPY:
+		return f"{decompile(e.params[1])}={decompile(e.params[0])}"
+	if e.type is Expression.COMMA:
+		return f"({over(e.params,',')},)"
+	if e.type is Expression.RET:
+		return f"return {decompile(e.params[0])}"
+
+
 def member_getter(node):
 	if isinstance(node, Context):
 		return None, [("tempcounter", node.tempcounter), ("fun", node.fun.name), ("func_list", [_.name for _ in node.func_list]), ("scopes", node.scopes)]
