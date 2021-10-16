@@ -1,16 +1,5 @@
+from .utils import Pointer
 from .ast import *
-
-
-class Pointer:
-	def __init__(self, val):
-		self.val = val
-
-
-def for_all_expr(f, tree, *args):
-	for param in tree.params:
-		if for_all_expr(f, param, *args):
-			return True
-	return f(tree, *args)
 
 
 def is_pure_fcall(e, context):
@@ -73,7 +62,7 @@ def adopt(e, is_child, get_children):
 c=Context()
 s=lambda e:(for_all_expr(simplify, e, c.fun, c) and False) or print(e)
 def simplify(e, f, context):
-	if OBSERVER[0] != OBSERVER[1]:
+	if OBSERVER[0] != OBSERVER[1] and OBSERVER[2]:
 		print(OBSERVER[0])
 		OBSERVER[1] = OBSERVER[0].copy()
 		input()
@@ -96,7 +85,7 @@ def simplify(e, f, context):
 					param.set(e_comma(param.copy(), rhs))
 				else:
 					tmp = f.temp()
-					param.set(e_comma(tmp.assign(rhs), e_copy(tmp, lhs), tmp))
+					param.set(e_comma(tmp.assign(rhs), e_copy(tmp.copy(), lhs), tmp.copy()))
 
 	# x=(a,1)+(b,2)+3 -> (a,b,x=1+2+3)
 	if any(map(is_comma, e.params)):
@@ -117,7 +106,7 @@ def simplify(e, f, context):
 					if const is None:
 						tmp = f.temp()
 						comma_params.append(tmp.assign(param.copy()))
-						param.set(tmp)
+						param.set(tmp.copy())
 					else:
 						comma_params.append(param.copy())
 						param.set(const)
@@ -250,7 +239,7 @@ def simplify(e, f, context):
 			e.set(e_eq(e_eq(e.copy(), 0), 0))
 
 
-OBSERVER = [e_nop(), e_nop()]
+OBSERVER = [e_nop(), e_nop(), False]
 def optimise(context):
 	last = None
 	new = [f.code.copy() for f in context.func_list]
@@ -261,8 +250,11 @@ def optimise(context):
 			OBSERVER[0] = f.code
 			for_all_expr(simplify, f.code, f, context)
 		new = [f.code.copy() for f in context.func_list]
+	print("============================")
 	for f in context.func_list:
+		print(f.name, ":")
 		print(f.code)
+		print()
 
 
 def run(ctx):

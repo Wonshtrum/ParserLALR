@@ -1,6 +1,0 @@
-func find(c,s) { return *s ? *s==c ? 1 : find(c,s+1) : 0; }
-func length(s) { var result=0; while(*s++){++result;} return result; }
-func lastCharN(s,n) return s[length(s)-n];
-
-//Returns true if the name ends with "aki" or "äki"
-func akiEnd(s) return find(lastCharN(s,2), "kK") && findq(lastCharN(s,1), "iI") && find(lastCharN(s,3), "aäAÄ");

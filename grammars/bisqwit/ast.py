@@ -1,5 +1,6 @@
 from lalr.utils import node_print, colored, member_getter as default_getter
 from lalr.errors import ParserError
+from .utils import pre_param
 from types import GeneratorType as generator
 
 
@@ -26,9 +27,9 @@ def decompile(e):
 	if e.type is Expression.LOOP:
 		return f"while({decompile(e.params[0])}){{{over(e.params[1:],';')};}}"
 	if e.type is Expression.ADDROF:
-		return f"*({decompile(e.params[0])})"
-	if e.type is Expression.DEREF:
 		return f"&({decompile(e.params[0])})"
+	if e.type is Expression.DEREF:
+		return f"*({decompile(e.params[0])})"
 	if e.type is Expression.FCALL:
 		return f"{decompile(e.params[0])}({over(e.params[1:],',')})"
 	if e.type is Expression.COPY:
@@ -69,12 +70,6 @@ def member_getter(node):
 class Beautiful:
 	def __repr__(self):
 		return node_print(None, self, member_getter)
-
-
-def pre_param(f, *args):
-	def wrapper(*params):
-		return f(*args, *params)
-	return wrapper
 
 
 class Context(Beautiful):
@@ -131,11 +126,10 @@ class Context(Beautiful):
 
 
 class Identifier(Beautiful):
-	UNDEFINED = "undefined"
 	PARAMETER = "parameter"
 	FUNCTION = "function"
 	VARIABLE = "variable"
-	ENUM = (UNDEFINED, PARAMETER, FUNCTION, VARIABLE)
+	ENUM = (PARAMETER, FUNCTION, VARIABLE)
 	def __init__(self, type, name, index=0):
 		self.type = type
 		self.name = name
@@ -180,7 +174,7 @@ class Expression(Beautiful):
 		elif isinstance(arg, Identifier):
 			return Expression(Expression.IDENT, ident=arg)
 		elif isinstance(arg, str):
-			return Expression(Expression.STRING, string=arg)
+			return Expression(Expression.STRING, string=arg+chr(0))
 		elif isinstance(arg, int):
 			return Expression(Expression.NUMBER, number=arg)
 		else:
@@ -252,6 +246,13 @@ for n in Expression.ENUM:
 expr = Expression.constructor
 is_true  = lambda e: is_number(e) and e.number != 0
 is_false = lambda e: is_number(e) and e.number == 0
+
+
+def for_all_expr(f, tree, *args):
+	for param in tree.params:
+		if for_all_expr(f, param, *args):
+			return True
+	return f(tree, *args)
 
 
 class Function(Beautiful):

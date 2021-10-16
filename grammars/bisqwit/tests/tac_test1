@@ -1,0 +1,5 @@
+function append(output, c) {
+	*output = c;
+	*++output = 0;
+	return output;
+}

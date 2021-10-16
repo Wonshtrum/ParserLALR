@@ -170,7 +170,7 @@ class ParserBisqwit(Parser):
 	@production(Expression2, "?", Expression1, ":", Expression1, out=Expression1)
 	def _(ctx, condition, _1, thencase, _2, elsecase):
 		i = ctx.temp()
-		return e_comma(e_cor(e_cand(condition, e_comma(i.assign(thencase), 1)), i.assign(elsecase)), i)
+		return e_comma(e_cor(e_cand(condition, e_comma(i.assign(thencase), 1)), i.copy().assign(elsecase)), i.copy())
 	@production(Expression2, "=", Expression1, out=Expression1)
 	def _(l, _1, r):
 		return l.assign(r)
