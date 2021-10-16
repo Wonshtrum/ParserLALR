@@ -1,2 +1,11 @@
-var a;
-while(1){a++-a++;}
+function test(a, b, c, d) {
+	return (a+4) + (c+d-4) + (a+c) + (b+c);
+}
+
+function test2(a, b, c, d) {
+	return (a+4) + (c+d+7) + (a+c) + (b+c);
+}
+
+function test3(a, b, c, d, e, f, g) {
+	return a + b - c - (d - e) - f - g;
+}

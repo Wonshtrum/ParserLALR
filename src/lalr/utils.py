@@ -77,31 +77,35 @@ def member_getter(node):
 		and k not in dir(node.__class__)]
 
 
+def colored(text, color, bold=True):
+	return f"\033[{1*bold};38;5;{color}m{text}\033[0m"
+
+
 def node_print(name, node, sub_getter, tab="", show_none=False, visited=None):
 	dec = " "
 	node_repr, sub_nodes = sub_getter(node)
 	length = 0 if sub_nodes is None else len(sub_nodes)
 	node_repr = node.__class__.__name__ if node_repr is None else node_repr
+	result = "" if name is None else f"{name}: "
 	if visited is None:
 		visited = []
 	if any(node is _ for _ in visited):
-		node_repr = f"(dup) {node_repr}"
+		node_repr = colored(f"(dup) {node_repr}", 1)
+		return f"{result}{node_repr}"
 	else:
 		visited.append(node)
-	result = "" if name is None else f"{name}: "
 	result = f"{result}{node_repr}"
 	if length == 0:
-		node_repr = repr(node) if node_repr is None else node_repr
 		return result
 	for i, (sub_node, value) in enumerate(sub_nodes):
 		if value is None and not show_none:
 			continue
 		result += "\n"+tab
 		if i == length-1:
-			result += "└"
+			result += colored("└", 40)
 			pad = " "
 		else:
-			result += "├"
-			pad = "│"
+			result += colored("├", 40)
+			pad = colored("│", 40)
 		result += node_print(sub_node, value, sub_getter, tab+pad+dec, show_none, visited)
 	return result

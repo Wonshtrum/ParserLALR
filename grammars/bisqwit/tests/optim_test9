@@ -1,0 +1,4 @@
+function test(x, y);
+function test2(x, y) {
+	return test(x++, y++) + 4;
+}

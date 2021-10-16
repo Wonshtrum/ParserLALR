@@ -5,7 +5,7 @@ from .ast import *
 
 class LexerBisqwit(Lexer):
 	ENTRIES = [
-		"if", "else", "while", "return", "var", "func",
+		"if", "else", "while", "return", "var", "function",
 		"=", ",", ";", "?", ":", "&",
 		"{", "}", "(", ")", "[", "]",
 		"+", "-", "*", "/", "%",
@@ -79,7 +79,7 @@ class ParserBisqwit(Parser):
 	def _(ctx, names, _1, name):
 		ctx.defparam(name)
 
-	@production("func", "id", out=FunctionStart)
+	@production("function", "id", out=FunctionStart)
 	def _(ctx, _1, name):
 		ctx.defun(name)
 		ctx.push()
@@ -128,9 +128,15 @@ class ParserBisqwit(Parser):
 	@production("return", FullExpression, ";", out=Statement)
 	def _(_1, expression, _2):
 		return e_ret(expression)
+	@production("return", ";", out=Statement)
+	def _(_1, _2):
+		return e_ret(0)
 	@production(FullExpression, ";", out=Statement)
 	def _(expression, _2):
 		return expression
+	@production(";", out=Statement)
+	def _(_1):
+		return e_nop();
 	"""@production(";", out=Statement)
 	def _(_1):
 		return"""
@@ -170,22 +176,21 @@ class ParserBisqwit(Parser):
 		return l.assign(r)
 	@production(Expression2, "+=", Expression1, out=Expression1)
 	def _(ctx, l, _1, r):
+		left = e_nop()
 		if not l.is_pure():
 			tmp = ctx.temp()
 			left = tmp.assign(e_addrof(l))
 			l = e_deref(tmp)
-			return e_comma(left, l.assign(e_add(l, r)))
-		return l.assign(e_add(l, r))
-
+		return e_comma(left, l.assign(e_add(l.copy(), r)))
 	@production(Expression2, "-=", Expression1, out=Expression1)
 	def _(ctx, l, _1, r):
 		r = e_neg(r)
+		left = e_nop()
 		if not l.is_pure():
 			tmp = ctx.temp()
 			left = tmp.assign(e_addrof(l))
 			l = e_deref(tmp)
-			return e_comma(left, l.assign(e_add(l, r)))
-		return l.assign(e_add(l, r))
+		return e_comma(left, l.assign(e_add(l.copy(), r)))
 	"""@production(Expression2, "*=", Expression1, out=Expression1)
 	def _(l, _1, r):
 		return
@@ -272,20 +277,20 @@ class ParserBisqwit(Parser):
 		return e_neg(e)
 	@production("++", Expression7, out=Expression7)
 	def _(ctx, _1, e):
+		left = e_nop()
 		if not e.is_pure():
 			tmp = ctx.temp()
 			left = tmp.assign(e_addrof(e))
 			e = e_deref(tmp)
-			return e_comma(left, e.assign(e_add(e, 1)))
-		return e.assign(e_add(e, 1))
+		return e_comma(left, e.assign(e_add(e.copy(), 1)))
 	@production("--", Expression7, out=Expression7)
 	def _(ctx, _1, e):
+		left = e_nop()
 		if not e.is_pure():
 			tmp = ctx.temp()
 			left = tmp.assign(e_addrof(e))
 			e = e_deref(tmp)
-			return e_comma(left, e.assign(e_add(e, -1)))
-		return e.assign(e_add(e, -1))
+		return e_comma(left, e.assign(e_add(e.copy(), -1)))
 	@production(Expression8, out=Expression7)
 	def _(e):
 		return e
@@ -298,7 +303,7 @@ class ParserBisqwit(Parser):
 			left = tmp1.assign(e_addrof(e))
 			e = e_deref(tmp1)
 		tmp2 = ctx.temp()
-		return e_comma(left, tmp2.assign(e), e.assign(e_add(e, 1)), tmp2)
+		return e_comma(left, tmp2.assign(e.copy()), e.assign(e_add(e.copy(), 1)), tmp2.copy())
 	@production(Expression8, "--", out=Expression8)
 	def _(ctx, e, _1):
 		left = e_nop()
@@ -307,7 +312,7 @@ class ParserBisqwit(Parser):
 			left = tmp1.assign(e_addrof(e))
 			e = e_deref(tmp1)
 		tmp2 = ctx.temp()
-		return e_comma(left, tmp2.assign(e), e.assign(e_add(e, -1)), tmp2)
+		return e_comma(left, tmp2.assign(e.copy()), e.assign(e_add(e.copy(), -1)), tmp2.copy())
 	@production("(", FullExpression, ")", out=Expression8)
 	def _(_1, e, _2):
 		return e
@@ -330,8 +335,8 @@ class ParserBisqwit(Parser):
 	def _(number):
 		return expr(number)
 	@production("true", out=Expression8)
-	def _(number):
+	def _(_1):
 		return expr(1)
 	@production("false", out=Expression8)
-	def _(number):
+	def _(_1):
 		return expr(0)

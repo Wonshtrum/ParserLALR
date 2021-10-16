@@ -1,4 +1,4 @@
-from lalr.utils import node_print, member_getter as default_getter
+from lalr.utils import node_print, colored, member_getter as default_getter
 from lalr.errors import ParserError
 from types import GeneratorType as generator
 
@@ -14,15 +14,15 @@ def decompile(e):
 	if e.type is Expression.IDENT:
 		return e.ident.name
 	if e.type is Expression.ADD:
-		return over(e.params, "+")
+		return f"({over(e.params,'+')})"
 	if e.type is Expression.NEG:
 		return f"-({decompile(e.params[0])})"
 	if e.type is Expression.EQ:
-		return over(e.params, "==")
+		return f"({over(e.params,'==')})"
 	if e.type is Expression.COR:
-		return over(e.params, " || ")
+		return f"({over(e.params,' || ')})"
 	if e.type is Expression.CAND:
-		return over(e.params, " && ")
+		return f"({over(e.params,' && ')})"
 	if e.type is Expression.LOOP:
 		return f"while({decompile(e.params[0])}){{{over(e.params[1:],';')};}}"
 	if e.type is Expression.ADDROF:
@@ -47,23 +47,23 @@ def member_getter(node):
 	elif isinstance(node, Function):
 		return f"Function: {node.name}", [(None, node.code)]
 	elif isinstance(node, Identifier):
-		return f"IDENT {node.type[0].upper()}{node.index}: {node.name}", None
+		return f"ident {colored(node.type[0].upper()+str(node.index),247)}: {colored(node.name,99)}", None
 	elif not isinstance(node, Expression):
 		return default_getter(node)
 	elif node.type is Expression.NOP:
-		return "NOP", None
+		return colored("nop", 3), None
 	elif node.type is Expression.STRING:
-		return f"STRING: {node.string}", None
+		return f"string: {colored(node.string,99)}", None
 	elif node.type is Expression.NUMBER:
-		return f"NUMBER: {node.number}", None
+		return f"number: {colored(node.number,201)}", None
 	elif node.type is Expression.IDENT:
 		return member_getter(node.ident)
 	elif node.type is Expression.FCALL:
-		return f"CALL({node.params[0]})", [(None, _) for _ in node.params[1:]]
+		return f"call({node.params[0]})", [(None, _) for _ in node.params[1:]]
 	elif node.type is Expression.COPY:
-		return "COPY", [("from", node.params[0]), ("to", node.params[1])]
+		return "copy", [(None, node.params[0]), (None, node.params[1])]
 	else:
-		return node.type.upper(), [(None, _) for _ in node.params]
+		return node.type, [(None, _) for _ in node.params]
 
 
 class Beautiful:
@@ -124,6 +124,10 @@ class Context(Beautiful):
 
 	def pop(self):
 		self.scopes.pop()
+
+	def print(self):
+		for f in self.func_list:
+			print(f.name, ":", decompile(f.code))
 
 
 class Identifier(Beautiful):
@@ -205,6 +209,7 @@ class Expression(Beautiful):
 		self.string = new.string
 		self.number = new.number
 		self.params = new.params
+		return self
 
 	def copy(self):
 		return Expression(self.type, self.ident, self.string, self.number, [_.copy() for _ in self.params])

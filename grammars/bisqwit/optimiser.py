@@ -73,6 +73,10 @@ def adopt(e, is_child, get_children):
 c=Context()
 s=lambda e:(for_all_expr(simplify, e, c.fun, c) and False) or print(e)
 def simplify(e, f, context):
+	if OBSERVER[0] != OBSERVER[1]:
+		print(OBSERVER[0])
+		OBSERVER[1] = OBSERVER[0].copy()
+		input()
 	# (1,2,(3,4)) -> (1,2,3,4)
 	if is_add(e) or is_comma(e) or is_cor(e) or is_cand(e):
 		adopt(e,
@@ -168,12 +172,22 @@ def simplify(e, f, context):
 				params.append(param)
 		e.params = params
 		if early_cut:
-			e.params = [_ for _ in e.params if not _.is_pure()]
+			for param in reversed(params):
+				if param.is_pure():
+					params.pop()
+				else:
+					break
 			e.set(e_comma(e.copy(), 0 if is_cand(e) else 1))
 	elif is_copy(e):
-		a, b = e.params
-		if a == b and a.is_pure():
-			e.set(a)
+		rhs, lhs = e.params
+		if rhs == lhs and rhs.is_pure():
+			e.set(rhs)
+		else:
+			comma_params = []
+			for_all_expr(lambda e: e==lhs and comma_params.append(e.set(f.temp()).assign(lhs)) and False, rhs)
+			if comma_params:
+				comma_params.append(e.copy())
+				e.set(e_comma(comma_params))
 	elif is_loop(e):
 		if is_false(e.params[0]):
 			e.set(e_nop())
@@ -213,10 +227,13 @@ def simplify(e, f, context):
 						params = params[:i+1]
 				i += 1
 		# (a=1,a) -> (a=1)
+		# (a=1,1) -> (a=1)
 		if len(params) > 1:
 			a = params[-1]
 			b = params[-2]
 			if is_ident(a) and is_copy(b) and is_ident(b.params[1]) and a.ident == b.params[1].ident:
+				params = params[:-1]
+			elif a.is_pure() and is_copy(b) and a == b.params[0]:
 				params = params[:-1]
 		e.params = params
 
@@ -230,9 +247,10 @@ def simplify(e, f, context):
 		if is_add(e) or is_comma(e):
 			e.set(e.params[0])
 		elif is_cor(e) or is_cand(e):
-			e.set(e_eq(e_eq(e, 0), 0))
+			e.set(e_eq(e_eq(e.copy(), 0), 0))
 
 
+OBSERVER = [e_nop(), e_nop()]
 def optimise(context):
 	last = None
 	new = [f.code.copy() for f in context.func_list]
@@ -240,5 +258,14 @@ def optimise(context):
 		last = new
 		check_purity(context)
 		for f in context.func_list:
+			OBSERVER[0] = f.code
 			for_all_expr(simplify, f.code, f, context)
 		new = [f.code.copy() for f in context.func_list]
+	for f in context.func_list:
+		print(f.code)
+
+
+def run(ctx):
+	ctx.print()
+	optimise(ctx)
+	ctx.print()

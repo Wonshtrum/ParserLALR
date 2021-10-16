@@ -1,0 +1,7 @@
+function pure() ;
+
+function impure() *pure=0;
+
+function test(a, b, c) {
+	return (a, b=2, c, impure(), pure(), c);
+}
