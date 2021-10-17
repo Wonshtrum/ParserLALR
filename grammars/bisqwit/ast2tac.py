@@ -88,27 +88,26 @@ class Compilation:
 			ctx.tgt = s
 
 	def compile_expression(self, e, ctx):
-		result = 0
+		result = None
 		make = lambda: ctx.new_reg()
 		put = lambda s: self.put(ctx, s)
-		compile = self.compile_expression
+		compile = lambda e: self.compile_expression(e, ctx)
 		if is_deref(e):
 			result = make()
-			put(s_read(result, compile(e.params[0], ctx)))
+			put(s_read(result, compile(e.params[0])))
 		elif is_addrof(e):
 			raise ValueError(f"Can't compile:\n {e}")
 		elif is_neg(e):
 			result = make()
-			put(s_neg(result, compile(e.params[0], ctx)))
+			put(s_neg(result, compile(e.params[0])))
 		elif is_ret(e):
-			result = compile(e.params[0], ctx)
+			result = compile(e.params[0])
 			put(s_ret(result))
 		elif is_number(e):
 			result = make()
 			put(s_init(result, "", e.number))
 		elif is_nop(e):
-			result = make()
-			put(s_init(result, "", 0))
+			put(s_nop())
 		elif is_string(e):
 			result = make()
 			put(s_init(result, "$STR", self.string.index(e.string)))
@@ -118,35 +117,39 @@ class Compilation:
 				result = make()
 				put(s_init(result, ident.name, 0))
 			elif is_variable(ident):
-				result = ctx.map[ident.index] = make()
+				if ident.index in ctx.map:
+					result = ctx.map[ident.index]
+				else:
+					result = ctx.map[ident.index] = make()
 			elif is_parameter(ident):
 				result = ident.index
-		elif is_add(e) or is_eq(e) or is_comma(e):
-			left = compile(e.params[0], ctx)
+		elif is_eq(e):
+			left  = compile(e.params[0])
+			right = compile(e.params[1])
+			result = make()
+			put(s_eq(result, left, right))
+		elif is_add(e) or is_comma(e):
+			left = compile(e.params[0])
 			for param in e.params[1:]:
-				right = compile(param, ctx)
+				right = compile(param)
 				if is_add(e):
 					result = make()
 					put(s_add(result, left, right))
-				elif is_eq(e):
-					result = make()
-					put(s_eq(result, left, right))
 				else:
 					result = right
 				left = result
 		elif is_copy(e):
 			src, dest = e.params
 			if is_deref(dest):
-				result = compile(src, ctx)
-				put(s_write(compile(dest.params[0], ctx), result))
+				result = compile(src)
+				put(s_write(compile(dest.params[0]), result))
 			else:
-				tmp = compile(src, ctx)
-				result = compile(dest, ctx)
+				tmp = compile(src)
+				result = compile(dest)
 				put(s_copy(result, tmp))
-				result = tmp
 		elif is_fcall(e):
 			result = make()
-			put(s_fcall(result, *[compile(p, ctx) for p in e.params]))
+			put(s_fcall(result, *[compile(p) for p in e.params]))
 		elif is_loop(e) or is_cand(e) or is_cor(e):
 			is_and = not is_cor(e)
 			result = make()
@@ -157,7 +160,7 @@ class Compilation:
 			b_then.next.val = b_else.next.val = b_end
 			begin = ctx.tgt.val
 			for i, param in enumerate(e.params):
-				var = compile(param, ctx)
+				var = compile(param)
 				if is_loop(e) and i < len(e.params)-1:
 					continue
 				condition = ctx.tgt.val = s_ifnz(var, None)
