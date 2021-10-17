@@ -59,6 +59,12 @@ for n in Statement.ENUM:
 stmt = Statement.constructor
 
 
+def follow(chain):
+	while chain.val:
+		yield chain.val
+		chain = chain.val.next
+
+
 class Compilation:
 	def __init__(self):
 		self.string = ""
@@ -186,6 +192,65 @@ class Compilation:
 		for f in context.func_list:
 			self.compile_function(f)
 
+	def optimise_delete_nops(self):
+		n_elisions = 0
+		for chain in self.statements:
+			s = None
+			for s in follow(chain.next):
+				if not (is_s_nop(s) or (is_s_ifnz(s) and s.next.val is s.cond.val) or (is_s_copy(s) and s.params[0] == s.params[1])):
+					break
+				if s is chain:
+					break
+				n_elisions += 1
+			else:
+				s = None
+			chain.next.val = s
+		return n_elisions
+
+	def optimise_GC(self):
+		n_erased = 0
+		changed = True
+		while changed:
+			changed = False
+			pending = []
+			visited = []
+			for s in self.labels.values():
+				pending.append(s.val)
+			while pending:
+				s = pending.pop()
+				if s in visited:
+					continue
+				visited.append(s)
+				if s.next.val:
+					pending.append(s.next.val)
+				if s.cond.val:
+					pending.append(s.cond.val)
+			for i in reversed(range(len(self.statements))):
+				if self.statements[i] not in visited:
+					self.statements.pop(i)
+					n_erased += 1
+					changed = True
+		return n_erased
+
+	def optimise_jump_threading(self):
+		n_changes = 0
+		for s in self.statements:
+			while is_s_ifnz(s) and is_s_ifnz(s.next.val) and s is not s.next.val and s.params[0] == s.next.val.params[0]:
+				s.next.val = s.next.val.next.val
+				n_changes += 1
+			while is_s_ifnz(s) and is_s_ifnz(s.cond.val) and s is not s.cond.val and s.params[0] == s.cond.val.params[0]:
+				s.cond.val = s.cond.val.cond.val
+				n_changes += 1
+		return n_changes
+
+
+	def optimise(self):
+		for s in self.statements:
+			if is_s_ret(s):
+				s.next.val = None
+		while self.optimise_delete_nops() or self.optimise_GC() and self.optimise_jump_threading():
+			pass
+		
 	def __repr__(self):
 		class Stats:
 			LABELS = 0
@@ -223,8 +288,8 @@ class Compilation:
 		while remaining:
 			chain = remaining.pop(0)
 			need_jmp = False
-			while chain.val is not None:
-				stats = statistics[chain.val]
+			for s in follow(chain):
+				stats = statistics[s]
 				if stats.done:
 					if need_jmp:
 						result += f"\tJMP\t{colored(stats.label,247)}\n"
@@ -232,15 +297,14 @@ class Compilation:
 				stats.done = True
 				if stats.label is not None:
 					result += f"{colored(stats.label,247)}:"
-				result += f"{chain.val}"
-				if chain.val.cond.val is not None:
-					branch_stats = statistics[chain.val.cond.val]
+				result += f"{s}"
+				if s.cond.val is not None:
+					branch_stats = statistics[s.cond.val]
 					result += f" {colored(branch_stats.label,247)}"
 					if not branch_stats.done:
-						remaining.insert(0, chain.val.cond)
+						remaining.insert(0, s.cond)
 				result += "\n"
 				need_jmp = True
-				chain = chain.val.next
 
 		return result
 
