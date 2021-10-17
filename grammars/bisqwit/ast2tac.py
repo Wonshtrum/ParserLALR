@@ -19,7 +19,7 @@ class Statement:
 
 	def __init__(self, type, ident=None, value=None, next=None, cond=None, params=None):
 		self.type = type
-		self.ident = None if ident is None else f'"{ident}"'
+		self.ident = ident
 		self.value = value
 		self.next = Pointer(next)
 		self.cond = Pointer(cond)
@@ -42,11 +42,31 @@ class Statement:
 				return Statement(args[0], params=args[1:])
 		raise ValueError(f"Can't construct statement with {args}")
 
+	def set(self, other):
+		self.type = other.type
+		self.ident = other.ident
+		self.value = other.value
+		self.params = other.params
+		return self
+
+	def key(self):
+		return (self.type, self.ident, self.value, self.next.val, self.cond.val, *self.params)
+
+	def copy(self):
+		return Statement(self.type, self.ident, self.value, self.next.val, self.cond.val, list(self.params))
+
+	"""def __eq__(self, other):
+		return self.type is other.type and self.ident == other.ident and self.value == other.value and self.next.val is other.next.val and self.cond.val is other.cond.val and self.params == other.params
+
+	def __hash__(self):
+		return id(self)"""
+
 	def __repr__(self):
 		result = f"\t{self.type}\t"
 		result += " ".join(f"R{_:02}" for _ in self.params)
 		if self.type is Statement.INIT:
-			result += f" {colored(self.ident,99)} {colored(self.value,201)}"
+			ident = f'"{self.ident}"'
+			result += f" {colored(ident,99)} {colored(self.value,201)}"
 		return result
 
 	def __str__(self):
@@ -64,7 +84,7 @@ def follow(chain):
 		yield chain.val
 		chain = chain.val.next
 
-
+OBSERVER = [None, True]
 class Compilation:
 	def __init__(self):
 		self.string = ""
@@ -205,6 +225,7 @@ class Compilation:
 			else:
 				s = None
 			chain.next.val = s
+		print("elisions:", n_elisions)
 		return n_elisions
 
 	def optimise_GC(self):
@@ -230,26 +251,53 @@ class Compilation:
 					self.statements.pop(i)
 					n_erased += 1
 					changed = True
+		print("erased:", n_erased)
 		return n_erased
 
 	def optimise_jump_threading(self):
-		n_changes = 0
+		n_threaded = 0
 		for s in self.statements:
 			while is_s_ifnz(s) and is_s_ifnz(s.next.val) and s is not s.next.val and s.params[0] == s.next.val.params[0]:
 				s.next.val = s.next.val.next.val
-				n_changes += 1
+				n_threaded += 1
 			while is_s_ifnz(s) and is_s_ifnz(s.cond.val) and s is not s.cond.val and s.params[0] == s.cond.val.params[0]:
 				s.cond.val = s.cond.val.cond.val
-				n_changes += 1
-		return n_changes
+				n_threaded += 1
+			while is_s_init(s) and not s.ident and is_s_ifnz(s.next.val) and s.params[0] == s.next.val.params[0]:
+				s.next.val = s.next.val.cond.val if s.value else s.next.val.next.val
+				n_threaded += 1
+			if is_s_copy(s) and is_s_ret(s.next.val) and s.next.val.params[0] in s.params:
+				s.set(s_ret(s.params[1]))
+				n_threaded += 1
+		print("jumpthreaded:", n_threaded)
+		return n_threaded
 
+	def optimise_merge_trees(self):
+		n_merged = 0
+		hashes = {}
+		for s in self.statements:
+			key = s.key()
+			if key in hashes:
+				m_merged += 1
+			hashes[s.key()] = s
+		for s in self.statements:
+			if s.next.val is not None:
+				s.next.val = hashes[s.next.val.key()]
+			if s.cond.val is not None:
+				s.cond.val = hashes[s.cond.val.key()]
+		print("merged:", n_merged)
+		return n_merged
 
 	def optimise(self):
+		OBSERVER[0] = self.statements
 		for s in self.statements:
 			if is_s_ret(s):
 				s.next.val = None
-		while self.optimise_delete_nops() or self.optimise_GC() and self.optimise_jump_threading():
-			pass
+		while self.optimise_delete_nops() or self.optimise_GC() or self.optimise_jump_threading() or self.optimise_merge_trees():
+			if str(self) != OBSERVER[0] and OBSERVER[1]:
+				print(self)
+				OBSERVER[0] = str(self)
+				input()
 		
 	def __repr__(self):
 		class Stats:
