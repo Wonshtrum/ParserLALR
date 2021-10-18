@@ -1,3 +1,6 @@
+import re
+
+
 class Set(set):
 	def update(self, elements):
 		result = not self.issuperset(elements)
@@ -79,6 +82,10 @@ def member_getter(node):
 
 def colored(text, color, bold=True):
 	return f"\033[{1*bold};38;5;{color}m{text}\033[0m"
+
+
+def uncolored(text):
+	return re.sub(r"\x1b[[;\d]*m", "", text)
 
 
 def node_print(name, node, sub_getter, tab="", show_none=False, visited=None):

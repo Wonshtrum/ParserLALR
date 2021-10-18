@@ -1,7 +1,6 @@
-from lalr.utils import Set, node_print, colored, member_getter as default_getter
-from .utils import Pointer
+from lalr.utils import Set, node_print, colored, uncolored, member_getter as default_getter
+from .utils import Pointer, shuffle
 from .ast import *
-import re
 
 
 class Statement:
@@ -58,6 +57,8 @@ class Statement:
 	def pure(self):
 		if self.type is Statement.IFNZ:
 			return False
+		elif self.type is Statement.WRITE:
+			return False
 		elif self.type is Statement.FCALL:
 			return False
 		elif self.type is Statement.RET:
@@ -79,7 +80,7 @@ class Statement:
 
 	def __repr__(self):
 		result = f"\t{self.type}\t"
-		result += " ".join(f"R{_:02}" for _ in self.params)
+		result += " ".join("..." if _ is None else f"R{_:02}" for _ in self.params)
 		if self.type is Statement.INIT:
 			ident = f'"{self.ident}"'
 			result += f" {colored(ident,99)} {colored(self.value,201)}"
@@ -91,7 +92,7 @@ class Statement:
 
 for n in Statement.ENUM:
 	locals()[f"s_{n}"]  = pre_param(Statement.constructor, n)
-	locals()[f"is_s_{n}"] = pre_param(lambda n, e: e.type is n, n)
+	locals()[f"is_s_{n}"] = pre_param(lambda n, s: isinstance(s, Statement) and s.type is n, n)
 stmt = Statement.constructor
 
 
@@ -131,13 +132,15 @@ class AccessInfo(dict):
 			if include_ifnz_as_writers and is_s_ifnz(where):
 				state[where.params[0]] = Set([where])
 		for wr, wi in where.write_regs():
-			state[wr] = Set([where])
+			if wr is not None:
+				state[wr] = Set([where])
+		if where.next.val is not None:
+			state_ = state
+			if where.cond.val is not None:
+				state_ = [Set(_) for _ in state]
+			self.trace(where.next.val, state_, follow_copies, include_ifnz_as_writers)
 		if where.cond.val is not None:
 			self.trace(where.cond.val, state, follow_copies, include_ifnz_as_writers)
-		if where.next.val is not None:
-			if where.cond.val is not None:
-				state = [Set(_) for _ in state]
-			self.trace(where.next.val, state, follow_copies, include_ifnz_as_writers)
 
 
 	def run(self, env, follow_copies, include_ifnz_as_writers):
@@ -228,7 +231,7 @@ class Compilation:
 			result = make()
 			put(s_eq(result, left, right))
 		elif is_add(e) or is_comma(e):
-			left = compile(e.params[0])
+			result = left = compile(e.params[0])
 			for param in e.params[1:]:
 				right = compile(param)
 				if is_add(e):
@@ -272,6 +275,9 @@ class Compilation:
 					condition.cond.val = b_else
 			ctx.tgt.val = begin if is_loop(e) else b_then
 			ctx.tgt = b_end.next
+		if result is None:
+			print(e)
+			input()
 		return result
 
 	def compile_function(self, f):
@@ -292,21 +298,29 @@ class Compilation:
 	def optimise_delete_nops(self):
 		n_elisions = 0
 		infos = self.generate_access_infos(False)
+		equiv_nop = lambda s: (is_s_nop(s)
+			or (is_s_ifnz(s) and (s.next.val is s.cond.val or s.cond.val is None))
+			or (is_s_copy(s) and s.params[0] == s.params[1])
+			or (s.pure() and not any(infos[s].params[wi] for wr, wi in s.write_regs()))
+		)
 		for chain in self.statements:
 			s = None
 			for s in follow(chain.next):
-				if not (is_s_nop(s)
-					or (is_s_ifnz(s) and (s.next.val is s.cond.val or s.cond.val is None))
-					or (is_s_copy(s) and s.params[0] == s.params[1])
-					or (s.pure() and not any(infos[s].params[wi] for wr, wi in s.write_regs()))
-					):
-					break
-				if s is chain:
+				if s is chain or not equiv_nop(s):
 					break
 				n_elisions += 1
 			else:
 				s = None
 			chain.next.val = s
+			if chain.cond.val is not None and equiv_nop(chain.cond.val):
+				chain.cond.val = chain.cond.val.next.val
+				n_elisions += 1
+		for s, info in infos.items():
+			if not s.pure():
+				for wr, wi in s.write_regs():
+					if not info.params[wi]:
+						s.params[wi] = None
+						input(f"unused register: {s}")
 		print("elisions:", n_elisions)
 		return n_elisions
 
@@ -373,14 +387,133 @@ class Compilation:
 		print("merged:", n_merged)
 		return n_merged
 
+	def reach(self, start, end, exclude):
+		visited = Set([exclude])
+		pending = [start]
+		while pending:
+			chain = pending.pop()
+			if not visited.add(chain):
+				continue
+			if chain is end:
+				return True
+			if chain.cond.val is not None:
+				pending.append(chain.cond.val)
+			if chain.next.val is not None:
+				pending.append(chain.next.val)
+		return False
+
+	def get_literal(self, infos, sources, start, exact_value=True, with_ident=False):
+		result = None
+		for s in sources:
+			value = None
+			if s is not start:
+				if is_s_init(s):
+					if s.ident:
+						if not with_ident:
+							return None
+						value = (s.ident, s.value)
+					else:
+						value = s.value if exact_value else bool(s.value)
+						if with_ident:
+							value = ("", value)
+				elif is_s_ifnz(s):
+					value = self.reach(s.cond.val, start, s)
+					if value == self.reach(s.next.val, start, s):
+						return None
+					if value and exact_value:
+						if not all(is_s_eq(source) for source in infos[s].params[0]):
+							return None
+					if with_ident:
+						value = ("", value)
+			if (result is not None and value != result) or value is None:
+				return None
+			result = value
+		return result
+
+	def optimise_simplify(self):
+		for include_ifnz_as_writers in (False, True):
+			infos = self.generate_access_infos(True, include_ifnz_as_writers)
+			n_folds = 0
+			n_elisions = 0
+			for s, info in infos.items():
+				get_literal = lambda sources, *args, **kwargs: self.get_literal(infos, sources, s, *args, **kwargs)
+				if is_s_neg(s):
+					op1 = get_literal(info.params[1])
+					dest = s.params[0]
+					if op1 is not None:
+						s.set(s_init(dest, "", -op1))
+						n_folds += 1
+				elif is_s_add(s):
+					op1 = get_literal(info.params[1])
+					op2 = get_literal(info.params[2])
+					dest = s.params[0]
+					if op1 and op2:
+						s.set(s_init(dest, "", op1+op2))
+						n_folds += 1
+					elif op1 == 0:
+						s.set(s_copy(dest, s.params[2]))
+						n_folds += 1
+					elif op2 == 0:
+						s.set(s_copy(dest, s.params[1]))
+						n_folds += 1
+				elif is_s_eq(s):
+					dest = s.params[0]
+					if info.params[1] == info.params[2]:
+						s.set(s_init(dest, "", 1))
+						n_folds += 1
+						continue
+					op1 = get_literal(info.params[1])
+					op2 = get_literal(info.params[2])
+					if op1 is not None and op2 is not None:
+						s.set(s_init(dest, "", int(op1==op2)))
+						n_folds += 1
+				elif is_s_ifnz(s):
+					op1 = get_literal(info.params[0], False)
+					if op1 is not None:
+						if op1:
+							s.next.val = s.cond.val
+						else:
+							s.cond.val = s.next.val
+						n_elisions += 1
+				elif is_s_init(s):
+					if n_elisions:
+						continue
+					dest = s.params[0]
+					for r, sources in enumerate(info.presence):
+						op1 = get_literal(sources, with_ident=True)
+						if op1 == (s.ident, s.value):
+							s.set(s_copy(dest, r))
+							n_folds += 1
+							break
+				elif is_s_fcall(s):
+					if not include_ifnz_as_writers and is_s_ret(s.next.val) and s.params[0] == s.next.val.params[0]:
+						idents = set(_.ident if is_s_init(_) and _.value == 0 else None for _ in info.params[1])
+						if len(idents) == 1 and list(idents)[0] in self.labels:
+							jump = self.labels[list(idents)[0]].val
+							params = s.params[2:]
+							s.set(s_nop())
+							p_tgt = Pointer(s.next)
+							def copy(dest, src):
+								p_tgt.val.val = s_copy(dest, src)
+								self.statements.append(p_tgt.val.val)
+								p_tgt.val = p_tgt.val.val.next
+							def make_tmp():
+								tmp = len(params)
+								self.max_regs_count = max(self.max_regs_count, tmp)
+								return tmp
+							shuffle(params, copy, make_tmp)
+							p_tgt.val.val = jump
+		print("folds:", n_folds+n_elisions)
+		return n_folds+n_elisions
+
 	def optimise(self):
 		OBSERVER[0] = self.statements
-		while self.optimise_delete_nops() or self.optimise_GC() or self.optimise_jump_threading() or self.optimise_merge_trees():
+		while self.optimise_delete_nops() or self.optimise_GC() or self.optimise_jump_threading() or self.optimise_merge_trees() or self.optimise_simplify():
 			if str(self) != OBSERVER[0] and OBSERVER[1]:
 				print(self)
 				OBSERVER[0] = str(self)
 				input()
-		
+
 	def __repr__(self, v=False):
 		class Stats:
 			LABELS = 0
@@ -442,7 +575,7 @@ class Compilation:
 						remaining.insert(0, s.cond)
 				if v:
 					line = line.expandtabs()
-					length = len(re.sub(r"\x1b[[;\d]*m", "", line))
+					length = len(uncolored(line))
 					params = [[statistics[source].label if isinstance(source, Statement) else source for source in entry] for entry in infos[s].params]
 					presence = {r:[statistics[source].label if isinstance(source, Statement) else source for source in entry] for r,entry in enumerate(infos[s].presence) if entry}
 					line += f"{' '*(35-length)}{params}\n{' '*35}{presence}"
