@@ -1,6 +1,7 @@
-from lalr.utils import node_print, colored, member_getter as default_getter
+from lalr.utils import Set, node_print, colored, member_getter as default_getter
 from .utils import Pointer
 from .ast import *
+import re
 
 
 class Statement:
@@ -47,19 +48,34 @@ class Statement:
 		self.ident = other.ident
 		self.value = other.value
 		self.params = other.params
+		if other.type is not Statement.IFNZ:
+			self.cond = Pointer(None)
 		return self
-
-	def key(self):
-		return (self.type, self.ident, self.value, self.next.val, self.cond.val, *self.params)
 
 	def copy(self):
 		return Statement(self.type, self.ident, self.value, self.next.val, self.cond.val, list(self.params))
 
-	"""def __eq__(self, other):
-		return self.type is other.type and self.ident == other.ident and self.value == other.value and self.next.val is other.next.val and self.cond.val is other.cond.val and self.params == other.params
+	def pure(self):
+		if self.type is Statement.IFNZ:
+			return False
+		elif self.type is Statement.FCALL:
+			return False
+		elif self.type is Statement.RET:
+			return False
+		return True
 
-	def __hash__(self):
-		return id(self)"""
+	def key(self):
+		return (self.type, self.ident, self.value, self.next.val, self.cond.val, *self.params)
+
+	def read_regs(self):
+		if self.type is Statement.IFNZ or self.type is Statement.RET:
+			return [(self.params[0], 0)]
+		return zip(self.params[1:], range(1, len(self.params)))
+
+	def write_regs(self):
+		if self.type is Statement.IFNZ or self.type is Statement.RET:
+			return []
+		return zip(self.params[:1], [0])
 
 	def __repr__(self):
 		result = f"\t{self.type}\t"
@@ -84,6 +100,62 @@ def follow(chain):
 		yield chain.val
 		chain = chain.val.next
 
+
+class AccessInfo(dict):
+	class Entry:
+		def __init__(self, n_params, n_regs):
+			self.params = [Set() for _ in range(n_params)]
+			self.presence = [Set() for _ in range(n_regs)]
+
+	def trace(self, where, state, follow_copies, include_ifnz_as_writers):
+		n_changes = 0
+		entry = self[where]
+		max_regs_count = len(state)
+		for r in range(max_regs_count):
+			for source in state[r]:
+				n_changes += entry.presence[r].add(source)
+		if (follow_copies and is_s_copy(where)):
+			if n_changes == 0:
+				return
+			state[where.params[0]] = Set(state[where.params[1]])
+		else:
+			for rr, ri in where.read_regs():
+				for source in state[rr]:
+					n_changes += entry.params[ri].add(source)
+					if isinstance(source, Statement):
+						for wr, wi in source.write_regs():
+							if wr == rr:
+								n_changes += self[source].params[wi].add(where)
+			if n_changes == 0:
+				return
+			if include_ifnz_as_writers and is_s_ifnz(where):
+				state[where.params[0]] = Set([where])
+		for wr, wi in where.write_regs():
+			state[wr] = Set([where])
+		if where.cond.val is not None:
+			self.trace(where.cond.val, state, follow_copies, include_ifnz_as_writers)
+		if where.next.val is not None:
+			if where.cond.val is not None:
+				state = [Set(_) for _ in state]
+			self.trace(where.next.val, state, follow_copies, include_ifnz_as_writers)
+
+
+	def run(self, env, follow_copies, include_ifnz_as_writers):
+		max_regs_count = env.max_regs_count
+		for s in env.statements:
+			self[s] = AccessInfo.Entry(len(s.params), max_regs_count)
+		for label, s in env.labels.items():
+			state = [Set() for _ in range(max_regs_count)]
+			num_params = env.num_params[label]
+			for r in range(max_regs_count):
+				if r < num_params:
+					state[r].add((label, r))
+				#else:
+				#	state[r].add(None)
+			self.trace(s.val, state, follow_copies, include_ifnz_as_writers)
+		return self
+
+
 OBSERVER = [None, True]
 class Compilation:
 	def __init__(self):
@@ -91,6 +163,7 @@ class Compilation:
 		self.statements = []
 		self.num_params = {}
 		self.labels = {}
+		self.max_regs_count = 0
 
 	def build_strings(self, context):
 		strings = []
@@ -206,18 +279,27 @@ class Compilation:
 		self.labels[f.name] = Pointer(None)
 		ctx = Context(f.num_params, self.labels[f.name])
 		self.compile_expression(f.code, ctx)
+		self.max_regs_count = max(self.max_regs_count, ctx.counter)
 
 	def compile(self, context):
 		self.build_strings(context)
 		for f in context.func_list:
 			self.compile_function(f)
 
+	def generate_access_infos(self, follow_copies, include_ifnz_as_writers=False):
+		return AccessInfo().run(self, follow_copies, include_ifnz_as_writers)
+
 	def optimise_delete_nops(self):
 		n_elisions = 0
+		infos = self.generate_access_infos(False)
 		for chain in self.statements:
 			s = None
 			for s in follow(chain.next):
-				if not (is_s_nop(s) or (is_s_ifnz(s) and s.next.val is s.cond.val) or (is_s_copy(s) and s.params[0] == s.params[1])):
+				if not (is_s_nop(s)
+					or (is_s_ifnz(s) and (s.next.val is s.cond.val or s.cond.val is None))
+					or (is_s_copy(s) and s.params[0] == s.params[1])
+					or (s.pure() and not any(infos[s].params[wi] for wr, wi in s.write_regs()))
+					):
 					break
 				if s is chain:
 					break
@@ -257,6 +339,9 @@ class Compilation:
 	def optimise_jump_threading(self):
 		n_threaded = 0
 		for s in self.statements:
+			if is_s_ret(s) and s.next.val is not None:
+				s.next.val = None
+				n_threaded += 1
 			while is_s_ifnz(s) and is_s_ifnz(s.next.val) and s is not s.next.val and s.params[0] == s.next.val.params[0]:
 				s.next.val = s.next.val.next.val
 				n_threaded += 1
@@ -290,16 +375,13 @@ class Compilation:
 
 	def optimise(self):
 		OBSERVER[0] = self.statements
-		for s in self.statements:
-			if is_s_ret(s):
-				s.next.val = None
 		while self.optimise_delete_nops() or self.optimise_GC() or self.optimise_jump_threading() or self.optimise_merge_trees():
 			if str(self) != OBSERVER[0] and OBSERVER[1]:
 				print(self)
 				OBSERVER[0] = str(self)
 				input()
 		
-	def __repr__(self):
+	def __repr__(self, v=False):
 		class Stats:
 			LABELS = 0
 			def __init__(self):
@@ -332,6 +414,12 @@ class Compilation:
 			remaining.append(s)
 			statistics[s.val].label = label
 
+		if v:
+			for s in self.statements:
+				if statistics[s].label is None:
+					statistics[s].add_label()
+			infos = self.generate_access_infos(False)
+
 		result = f"{colored('STRINGS',3)}:\n{colored(self.string,99)}\n\n{colored('CODE',3)}:\n"
 		while remaining:
 			chain = remaining.pop(0)
@@ -343,15 +431,22 @@ class Compilation:
 						result += f"\tJMP\t{colored(stats.label,247)}\n"
 					break
 				stats.done = True
+				line = ""
 				if stats.label is not None:
-					result += f"{colored(stats.label,247)}:"
-				result += f"{s}"
+					line += f"{colored(stats.label,247)}:"
+				line += f"{s}"
 				if s.cond.val is not None:
 					branch_stats = statistics[s.cond.val]
-					result += f" {colored(branch_stats.label,247)}"
+					line += f" {colored(branch_stats.label,247)}"
 					if not branch_stats.done:
 						remaining.insert(0, s.cond)
-				result += "\n"
+				if v:
+					line = line.expandtabs()
+					length = len(re.sub(r"\x1b[[;\d]*m", "", line))
+					params = [[statistics[source].label if isinstance(source, Statement) else source for source in entry] for entry in infos[s].params]
+					presence = {r:[statistics[source].label if isinstance(source, Statement) else source for source in entry] for r,entry in enumerate(infos[s].presence) if entry}
+					line += f"{' '*(35-length)}{params}\n{' '*35}{presence}"
+				result += f"{line}\n"
 				need_jmp = True
 
 		return result
