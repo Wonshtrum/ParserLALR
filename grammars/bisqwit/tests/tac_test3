@@ -1,0 +1,17 @@
+function length(s) {
+	var result = 0;
+	while(*s++) {
+		++result;
+	}
+	return result;
+}
+
+function trunc(output, s, n) {
+	n = length(s) - n;
+	while(n) {
+		*output++ = *s++;
+		--n;
+	}
+	*output = 0;
+	return output;
+}

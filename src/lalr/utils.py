@@ -28,42 +28,12 @@ def enum_list(l, join=", ", final="or ", quote='"'):
 	return join.join(l)
 
 
-class Node:
-	def __init__(self, type, *args, **kwargs):
-		self.type = type
-		self.args = list(args)
-		for k, v in kwargs.items():
-			if hasattr(v, "__iter__"):
-				self.add(Node(k, *v))
-			else:
-				self.add(Node(k, v))
+def colored(text, color, bold=True):
+	return f"\033[{1*bold};38;5;{color}m{text}\033[0m"
 
-	def add(self, arg):
-		self.args.append(arg)
-		return self
 
-	def format(self, tab=""):
-		dec = " "
-		result = self.type
-		for i, arg in enumerate(self.args):
-			result += "\n"+tab
-			if i == len(self.args)-1:
-				result += "└"
-				pad = " "
-			else:
-				result += "├"
-				pad = "│"
-			if isinstance(arg, Node):
-				result += arg.format(tab+pad+dec)
-			else:
-				result += str(arg)
-		return result
-
-	def __repr__(self):
-		return self.format()
-
-	def __str__(self):
-		return self.format()
+def uncolored(text):
+	return re.sub(r"\x1b[[;\d]*m", "", text)
 
 
 def member_getter(node):
@@ -72,20 +42,14 @@ def member_getter(node):
 	elif hasattr(node, "__iter__") and not isinstance(node, str):
 		return None, [(k, v) for k, v in enumerate(node)]
 	elif "__dict__" not in dir(node.__class__):
-		return None, None
+		if isinstance(node, str):
+			return colored(f'"{node}"', 99), None
+		return colored(node, 201), None
 	else:
 		return None, [(k, getattr(node, k)) for k in dir(node)
 		if not callable(getattr(node, k))
 		and not k.startswith("__")
 		and k not in dir(node.__class__)]
-
-
-def colored(text, color, bold=True):
-	return f"\033[{1*bold};38;5;{color}m{text}\033[0m"
-
-
-def uncolored(text):
-	return re.sub(r"\x1b[[;\d]*m", "", text)
 
 
 def node_print(name, node, sub_getter, tab="", show_none=False, visited=None):
@@ -116,3 +80,30 @@ def node_print(name, node, sub_getter, tab="", show_none=False, visited=None):
 			pad = colored("│", 40)
 		result += node_print(sub_node, value, sub_getter, tab+pad+dec, show_none, visited)
 	return result
+
+
+class Node:
+	def subnode_getter(node):
+		if isinstance(node, Node):
+			return node.type, [(None, v) for v in node.args]
+		else:
+			return member_getter(node)
+
+	def __init__(self, type, *args, **kwargs):
+		self.type = type
+		self.args = list(args)
+		for k, v in kwargs.items():
+			if hasattr(v, "__iter__"):
+				self.add(Node(k, *v))
+			else:
+				self.add(Node(k, v))
+
+	def add(self, arg):
+		self.args.append(arg)
+		return self
+
+	def __repr__(self):
+		return node_print(None, self, Node.subnode_getter)
+
+	def __str__(self):
+		return self.__repr__()

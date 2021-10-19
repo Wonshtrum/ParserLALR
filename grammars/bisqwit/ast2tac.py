@@ -39,7 +39,7 @@ class Statement:
 			elif args[0] is Statement.IFNZ:
 				return Statement(Statement.IFNZ, cond=args[2], params=[args[1]])
 			else:
-				return Statement(args[0], params=args[1:])
+				return Statement(args[0], params=list(args[1:]))
 		raise ValueError(f"Can't construct statement with {args}")
 
 	def set(self, other):
@@ -69,12 +69,12 @@ class Statement:
 		return (self.type, self.ident, self.value, self.next.val, self.cond.val, *self.params)
 
 	def read_regs(self):
-		if self.type is Statement.IFNZ or self.type is Statement.RET:
-			return [(self.params[0], 0)]
+		if self.type is Statement.IFNZ or self.type is Statement.RET or self.type is Statement.WRITE:
+			return zip(self.params, range(len(self.params)))
 		return zip(self.params[1:], range(1, len(self.params)))
 
 	def write_regs(self):
-		if self.type is Statement.IFNZ or self.type is Statement.RET:
+		if self.type is Statement.IFNZ or self.type is Statement.RET or self.type is Statement.WRITE:
 			return []
 		return zip(self.params[:1], [0])
 
@@ -258,12 +258,14 @@ class Compilation:
 			b_then = s_init(result, "", 1 if is_and else 0)
 			b_else = s_init(result, "", 0 if is_and else 1)
 			b_end  = s_nop()
-			self.add(b_then, b_else, b_end)
+			if not is_loop(e):
+				self.add(b_then)
+			self.add(b_else, b_end)
 			b_then.next.val = b_else.next.val = b_end
-			begin = ctx.tgt.val
+			begin = ctx.tgt
 			for i, param in enumerate(e.params):
 				var = compile(param)
-				if is_loop(e) and i < len(e.params)-1:
+				if is_loop(e) and i != 0:
 					continue
 				condition = ctx.tgt.val = s_ifnz(var, None)
 				self.add(condition)
@@ -273,11 +275,8 @@ class Compilation:
 				else:
 					ctx.tgt = condition.next
 					condition.cond.val = b_else
-			ctx.tgt.val = begin if is_loop(e) else b_then
+			ctx.tgt.val = begin.val if is_loop(e) else b_then
 			ctx.tgt = b_end.next
-		if result is None:
-			print(e)
-			input()
 		return result
 
 	def compile_function(self, f):
@@ -320,7 +319,6 @@ class Compilation:
 				for wr, wi in s.write_regs():
 					if not info.params[wi]:
 						s.params[wi] = None
-						input(f"unused register: {s}")
 		print("elisions:", n_elisions)
 		return n_elisions
 
@@ -506,9 +504,63 @@ class Compilation:
 		print("folds:", n_folds+n_elisions)
 		return n_folds+n_elisions
 
+	def optimise_copy_elision(self):
+		def copy_readers(readers, wr):
+			copies = []
+			for reader in readers:
+				if is_s_copy(reader) and reader.params[1] == wr and reader.params[0] != wr and (not copies or copies[0].params[0] == reader.params[0]):
+					copies.append(reader)
+				else:
+					return []
+			return copies
+
+		infos = self.generate_access_infos(False)
+		for s, info in infos.items():
+			for wr, wi in s.write_regs():
+				copies = copy_readers(info.params[wi], wr)
+				if copies:
+					valid_writes = {s: wi}
+					nr = copies[0].params[0]
+					if not (any(
+						any(
+							not isinstance(source, Statement) or (source not in valid_writes and any(
+								wr2 == wr and (copy_readers(infos[source].params[wi2], wr2) != copies or (valid_writes.update({source: wi2}) and False)
+								for wr2, wi2 in source.write_regs())))
+							for source in infos[copy].params[1])
+						for copy in copies)
+						or any(
+							any(
+								infos[copy].presence[nr] != infos[write].presence[nr]
+								for write in valid_writes)
+							for copy in copies)
+						):
+						for ins, param_index in valid_writes.items():
+							ins.params[param_index] = nr
+						for copy in copies:
+							copy.set(s_nop())
+						print("copy_elisions:", 1)
+						return True
+			if is_s_copy(s) and s.params[0] != s.params[1]:
+				dest = s.params[0]
+				src = s.params[1]
+				changes = 0
+				for reader in info.params[0]:
+					if isinstance(reader, Statement):
+						dest_writers = infos[reader].presence[dest]
+						if all(is_s_copy(writer) and writer.params == s.params and infos[writer].presence[src] == infos[s].presence[src] for writer in dest_writers):
+							for rr, ri in s.read_regs():
+								if rr == dest:
+									reader.params[ri] = src
+									changes = 0
+				if changes:
+					print("copy_elisions:", changes)
+					return True
+		print("copy_elisions:", 0)
+		return False
+
 	def optimise(self):
 		OBSERVER[0] = self.statements
-		while self.optimise_delete_nops() or self.optimise_GC() or self.optimise_jump_threading() or self.optimise_merge_trees() or self.optimise_simplify():
+		while self.optimise_delete_nops() or self.optimise_GC() or self.optimise_jump_threading() or self.optimise_copy_elision() or self.optimise_simplify() or self.optimise_merge_trees():
 			if str(self) != OBSERVER[0] and OBSERVER[1]:
 				print(self)
 				OBSERVER[0] = str(self)
