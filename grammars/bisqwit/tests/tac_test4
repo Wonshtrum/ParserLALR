@@ -1,0 +1,3 @@
+function eq(a, b, yes, no) {
+	return (a!=b) ? yes : no;
+}

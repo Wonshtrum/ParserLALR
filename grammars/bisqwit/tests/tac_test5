@@ -1,0 +1,4 @@
+function test(x, y) {
+	x = y+5;
+	return 3;
+}

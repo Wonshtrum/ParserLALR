@@ -429,10 +429,10 @@ class Compilation:
 		return result
 
 	def optimise_simplify(self):
+		n_folds = 0
+		n_elisions = 0
 		for include_ifnz_as_writers in (False, True):
 			infos = self.generate_access_infos(True, include_ifnz_as_writers)
-			n_folds = 0
-			n_elisions = 0
 			for s, info in infos.items():
 				get_literal = lambda sources, *args, **kwargs: self.get_literal(infos, sources, s, *args, **kwargs)
 				if is_s_neg(s):
@@ -473,6 +473,31 @@ class Compilation:
 						else:
 							s.cond.val = s.next.val
 						n_elisions += 1
+						continue
+					zero_reg = None
+					for source in info.params[0]:
+						if is_s_eq(source):
+							info_source = infos[source]
+							paramno = 0
+							if get_literal(info_source.params[1]) == 0:
+								paramno = 2
+							elif get_literal(info_source.params[2]) == 0:
+								paramno = 1
+							else:
+								break
+							if zero_reg is None:
+								zero_reg = source.params[paramno]
+							elif zero_reg != source.params[paramno]:
+								break
+							if info.presence[zero_reg] != info_source.params[paramno]:
+								break
+						else:
+							break
+					else:
+						if zero_reg is not None:
+							s.params[0] = zero_reg
+							s.cond.val, s.next.val = s.next.val, s.cond.val
+							n_elisions += 1
 				elif is_s_init(s):
 					if n_elisions:
 						continue
