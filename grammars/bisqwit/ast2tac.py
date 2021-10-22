@@ -302,23 +302,24 @@ class Compilation:
 			or (is_s_copy(s) and s.params[0] == s.params[1])
 			or (s.pure() and not any(infos[s].params[wi] for wr, wi in s.write_regs()))
 		)
-		for chain in self.statements:
-			s = None
-			for s in follow(chain.next):
-				if s is chain or not equiv_nop(s):
-					break
-				n_elisions += 1
-			else:
-				s = None
-			chain.next.val = s
-			if chain.cond.val is not None and equiv_nop(chain.cond.val):
-				chain.cond.val = chain.cond.val.next.val
-				n_elisions += 1
+		pending = list(self.labels.values())
+		visited = Set()
+		while pending:
+			chain = pending.pop()
+			while chain.val is not None and chain.val not in visited:
+				if equiv_nop(chain.val) and chain.val is not chain.val.next.val:
+					chain.val = chain.val.next.val
+					n_elisions += 1
+				visited.add(chain.val)
+				if chain.val.cond.val is not None:
+					pending.append(chain.val.cond)
+				chain = chain.val.next
 		for s, info in infos.items():
 			if not s.pure():
 				for wr, wi in s.write_regs():
 					if not info.params[wi]:
 						s.params[wi] = None
+						n_elisions += 1
 		print("elisions:", n_elisions)
 		return n_elisions
 
@@ -328,14 +329,13 @@ class Compilation:
 		while changed:
 			changed = False
 			pending = []
-			visited = []
+			visited = Set()
 			for s in self.labels.values():
 				pending.append(s.val)
 			while pending:
 				s = pending.pop()
-				if s in visited:
+				if not visited.add(s):
 					continue
-				visited.append(s)
 				if s.next.val:
 					pending.append(s.next.val)
 				if s.cond.val:
@@ -386,8 +386,8 @@ class Compilation:
 		return n_merged
 
 	def reach(self, start, end, exclude):
-		visited = Set([exclude])
 		pending = [start]
+		visited = Set([exclude])
 		while pending:
 			chain = pending.pop()
 			if not visited.add(chain):
