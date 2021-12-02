@@ -1,7 +1,7 @@
 # ParserLALR
 This is a python implementation of the LALR(1) algorithm. It allows the generation of efficient parsers through a grammar definition.
 
-This package offers helper classes to create lexers and parsers as well as transformers function to shape a better output.
+This package offers helper classes to create lexers and parsers as well as transformer functions to shape the output.
 
 ## Implementation
 ### Lexers
@@ -45,77 +45,77 @@ A = NT()
 F = NT()
 T = NT()
 class ParserMath(Parser):
-	START = A
-	@production(A, "+", F, out=A)
-		...
-	@production(F, out=A)
-		...
-	@production(F, "*", T, out=F)
-		...
-	@production(T, out=F)
-		...
-	@production("(", A, ")", out=T)
-		...
-	@production("num", out=T)
-		...
+    START = A
+    @production(A, "+", F, out=A)
+        ...
+    @production(F, out=A)
+        ...
+    @production(F, "*", T, out=F)
+        ...
+    @production(T, out=F)
+        ...
+    @production("(", A, ")", out=T)
+        ...
+    @production("num", out=T)
+        ...
 ```
-This is technically enough to say if a string matches or not a grammar. To construct a meaningful output each production rule decorate a transformer function which, given a list of token that matches the rule, returns a value to propagate. The usual output is an AST.
+This is technically enough to say if a string matches or not a grammar. To construct a meaningful output each production rule decorates a transformer function which, given a list of tokens that matches the rule, returns a value to propagate. The usual output is an AST.
 Here is an example:
 ```py
 class ParserMath(Parser):
     START = A
     @production(A, "+", F, out=A)
-	def _(left, op, right):
+    def _(left, op, right):
         return {"left":left, "right":right, "op":op}
     @production(F, out=A)
     def _(x):
-		return x
+        return x
     @production(F, "*", T, out=F)
-	def _(left, op, right):
+    def _(left, op, right):
         return {"left":left, "right":right, "op":op}
     @production(T, out=F)
     def _(x):
-		return x
+        return x
     @production("(", A, ")", out=T)
     def _(lparen, x, rparen):
-		return x
+        return x
     @production("num", out=T)
     def _(x):
-		return x
+        return x
 ```
 
 ### Runtime
 Lexers and Parsers are built at runtime on class definition.
 
-Here is an example on how to use them:
+Here is an example of how to use them:
 ```py
 text = "2*(1+3)"
 lexer = LexerMath(text)
 tokens, error = lexer.tokens()
 if error:
     print(error)
-	exit()
+    exit()
 result, error = ParserMath.parse(tokens, lexer)
 if error:
     print(error)
-	exit()
+    exit()
 print(result)
 ```
 output:
 ```py
 {
-	"left": 2,
-	"op": "*",
-	"right": {
-		"left": 1
-		"op": "+"
-		"right": 3
-	}
+    "left": 2,
+    "op": "*",
+    "right": {
+        "left": 1,
+        "op": "+",
+        "right": 3
+    }
 }
 ```
 
 ## Experiments
-With this tools I created some [parsers](grammars). I started with really simple ones, like a JSON to python dict parser. But I quickly wanted to try and make a working programming language.
+With this tools I created several [parsers](grammars). I started with really simple ones, like a JSON to python dict parser. But I quickly wanted to try and make a working programming language.
 
 ### WYOOS
 [WYOOS](grammars/wyoos) is a very simple interpreted language inspired by the [Write your own Operating System](https://www.youtube.com/channel/UCQdZltW7bh1ta-_nCH7LWYw) YT channel.
@@ -123,12 +123,12 @@ With this tools I created some [parsers](grammars). I started with really simple
 ### Bisqwit
 [Bisqwit](grammars/bisqwit) is a more complete and low level compiled language inspired by the [Bisqwit](https://www.youtube.com/c/Bisqwit) YT channel.
 
-It is by far the most complex and advanced part of this repository and extends way beyond parsing algorithm, into compiling process.
+It is by far the most complex and advanced part of this repository and extends way beyond parsing algorithm, into compiler territory.
 
 The current process is broken in several steps.
 
 #### Step 1
-A plain text file is transformed into an AST (with an LALR parser).
+A plain text file is converted into an AST (with an LALR parser).
 
 #### Step 2
 The AST is simplified and optimised.
@@ -148,8 +148,8 @@ function test(a, b, c, d, e, x) {
 The final output can be rewritten as:
 ```
 function test(a, b, c, d, e, x) {
-	a && b && c=x;
-	return x;
+    a && b && c=x;
+    return x;
 }
 ```
 
@@ -159,7 +159,7 @@ Here is a visualisation of this process on the given input:
 
 ```
 function find(c, s) {
-	return *s ? *s==c ? 1 : find(c,s+1) : 0;
+    return *s ? *s==c ? 1 : find(c,s+1) : 0;
 }
 ```
 
