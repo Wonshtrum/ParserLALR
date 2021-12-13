@@ -1,5 +1,6 @@
 from .lrk import EOF
 from .errors import Illegal_Token
+from .regex import RegexGraph, to_ascii, parse_regex
 import re
 
 
@@ -36,7 +37,7 @@ def token(pattern, priority=DEFAULT_PRIORITY):
 					return Token(result[0], result[1], lexer)
 				else:
 					return Token(result, result, lexer)
-			entry = (re.compile(pattern, re.DOTALL), wrapper, priority)
+			entry = (pattern, wrapper, priority)
 			token.entries.append(entry)
 
 		def __set_name__(self, owner, name):
@@ -54,6 +55,7 @@ token.entries = []
 
 class Lexer:
 	ENTRIES = None
+	BACKEND = "re"
 	@classmethod
 	def build(cls):
 		if cls.ENTRIES is None:
@@ -64,11 +66,13 @@ class Lexer:
 			else:
 				cls.ENTRIES[i] = cls.expand(entry)
 		cls.ENTRIES.sort(key=lambda entry:-entry[2])
+		cls.backend = BackendGraph if cls.BACKEND == "graph" else BackendRe
+		cls.backend.build(cls)
 
 	@classmethod
 	def expand(cls, pattern, wrapper=None, priority=DEFAULT_PRIORITY):
-		if isinstance(pattern, str):
-			pattern = re.compile(re.escape(pattern))
+		if wrapper is None:
+			pattern = re.escape(pattern)
 			type = wrapper
 			wrapper = lambda lexer, x: Token(x, type, lexer)
 		return pattern, wrapper, priority
@@ -81,6 +85,7 @@ class Lexer:
 		self.pos = 0
 		self.pos_nl = 0
 		self.pos_end = 0
+		self.backend.init(self)
 
 	def advance(self, token):
 		n = len(token)
@@ -92,25 +97,18 @@ class Lexer:
 			after, _, before = token[::-1].partition("\n")
 			self.pos_nl = self.pos - len(after)
 
-	def raise_error(self, msg, size=1, note=None):
-		raise Illegal_Token(msg, self.file_name, self.text, self, size, note)
-
 	def tokens(self):
 		stream = []
 		try:
 			while self.view:
-				current = None
-				for pattern, wrapper, priority in self.ENTRIES:
-					m = pattern.match(self.view)
-					if m and (current is None or current[0].end() < m.end()):
-						current = (m, wrapper)
-				if current is None:
+				result = self.backend.get_token(self)
+				if result is None:
 					print(stream)
-					self.raise_error(f'Illegal character: "{self.view[0]}"')
-				m, wrapper = current
-				self.pos_end += m.end()
-				result = wrapper(self, m.group())
-				self.advance(m.group())
+					self.raise_error(f'Illegal character: "{self.text[self.pos]}"')
+				token, wrapper = result
+				self.pos_end += len(token)
+				result = wrapper(self, token)
+				self.advance(token)
 				if result is not None:
 					stream.append(result)
 			stream.append(Token(EOF, lexer=self))
@@ -118,8 +116,61 @@ class Lexer:
 			return None, error.format_error()
 		return stream, None
 
+	def raise_error(self, msg, size=1, note=None):
+		raise Illegal_Token(msg, self.file_name, self.text, self, size, note)
+
 	def __repr__(self):
 		return "\n".join(f"- {pattern}, {priority}" for pattern, wrapper, priority in self.ENTRIES)
 
 	def __str__(self):
 		return self.__repr__()
+
+
+class Backend:
+	@staticmethod
+	def build(lexer):
+		pass
+	@staticmethod
+	def init(lexer):
+		pass
+	@staticmethod
+	def get_token(lexer):
+		pass
+
+
+class BackendRe(Backend):
+	@staticmethod
+	def init(lexer):
+		lexer.ENTRIES = [(re.compile(pattern, re.DOTALL), wrapper, priority) for pattern, wrapper, priority in lexer.ENTRIES]
+
+	@staticmethod
+	def get_token(lexer):
+		current = None
+		for pattern, wrapper, priority in lexer.ENTRIES:
+			m = pattern.match(lexer.view)
+			if m and (current is None or current[0].end() < m.end()):
+				current = (m, wrapper)
+		if current is None:
+			return current
+		m, wrapper = current
+		return m.group(), wrapper
+
+
+class BackendGraph(Backend):
+	@staticmethod
+	def build(lexer):
+		lexer.GRAPH = RegexGraph(*[parse_regex(entry[0]) for entry in lexer.ENTRIES])
+		lexer.GRAPH.compile()
+
+	@staticmethod
+	def init(lexer):
+		lexer.view = to_ascii(lexer.view)
+
+	@staticmethod
+	def get_token(lexer):
+		m = lexer.GRAPH.match(lexer.view)
+		if m is None:
+			return m
+		token = lexer.text[lexer.pos:lexer.pos+m.length]
+		wrapper = lexer.ENTRIES[m.families[0].id][1]
+		return token, wrapper
